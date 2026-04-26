@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ['8.2', '8.3', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Install
+        run: |
+          if [ -f composer.json ]; then
+            composer install --prefer-dist --no-progress --no-interaction
+          else
+            echo "No composer.json yet — skipping install"
+          fi
+
+      - name: Lint
+        run: |
+          if [ -x vendor/bin/php-cs-fixer ]; then
+            vendor/bin/php-cs-fixer check --diff
+          elif [ -x vendor/bin/pint ]; then
+            vendor/bin/pint --test
+          else
+            echo "No linter installed — skipping"
+          fi
+
+      - name: Test
+        run: |
+          if [ -x vendor/bin/phpunit ]; then
+            vendor/bin/phpunit
+          elif [ -x vendor/bin/pest ]; then
+            vendor/bin/pest
+          else
+            echo "No test runner installed — skipping"
+          fi
