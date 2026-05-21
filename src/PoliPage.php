@@ -174,34 +174,14 @@ final class PoliPage implements Transport
         $url = UrlBuilder::build($this->baseUrl, $path);
         $effectiveTimeout = $timeout ?? $this->defaultTimeout;
         $attempt = 0;
-        $retryAfter = null;
-        $lastError = null;
 
         while (true) {
-            if ($attempt > 0 && $lastError !== null) {
-                $delay = Backoff::compute($attempt, $this->retryDelay, $retryAfter, $this->jitterSource);
-                $this->fireOnRetry(new RetryEvent(
-                    attempt: $attempt + 1,
-                    delayMs: $delay * 1000.0,
-                    reason: $lastError,
-                ));
-                $this->logger->warning('polipage: retrying request', [
-                    'attempt' => $attempt + 1,
-                    'delay_ms' => $delay * 1000.0,
-                    'method' => $method,
-                    'path' => $path,
-                    'previous_error_code' => $lastError->errorCode,
-                ]);
-                usleep((int) round($delay * 1_000_000));
-            }
-
             $result = $this->sendOnce($method, $url, $path, $idempotencyKey, $bodyJson, $effectiveTimeout, $attempt + 1);
 
             if ($result->isOk()) {
                 return $result->response;
             }
             $lastError = $result->error;
-            $retryAfter = $result->retryAfter;
 
             if (!$result->retryable || $attempt >= $this->maxRetries) {
                 $this->logger->error('polipage: terminal failure', [
@@ -215,7 +195,24 @@ final class PoliPage implements Transport
                 throw $lastError;
             }
 
+            // Schedule the next attempt: increment, compute the backoff, fire the
+            // hook with the cause, log, and sleep. By doing this *after* saving
+            // $lastError, the cause is statically non-null at the hook call.
             ++$attempt;
+            $delay = Backoff::compute($attempt, $this->retryDelay, $result->retryAfter, $this->jitterSource);
+            $this->fireOnRetry(new RetryEvent(
+                attempt: $attempt + 1,
+                delayMs: $delay * 1000.0,
+                reason: $lastError,
+            ));
+            $this->logger->warning('polipage: retrying request', [
+                'attempt' => $attempt + 1,
+                'delay_ms' => $delay * 1000.0,
+                'method' => $method,
+                'path' => $path,
+                'previous_error_code' => $lastError->errorCode,
+            ]);
+            usleep((int) round($delay * 1_000_000));
         }
     }
 
