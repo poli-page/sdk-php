@@ -7,11 +7,18 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: PHP ${{ matrix.php-version }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        php-version: ['8.2', '8.3', '8.4']
+        os: [ubuntu-latest]
+        php-version: ['8.3', '8.4', '8.5']
+        include:
+          - os: macos-latest
+            php-version: '8.5'
+          - os: windows-latest
+            php-version: '8.5'
     steps:
       - uses: actions/checkout@v4
 
@@ -21,7 +28,17 @@ jobs:
           coverage: none
           tools: composer:v2
 
-      - name: Install
+      - name: Validate composer.json
+        shell: bash
+        run: |
+          if [ -f composer.json ]; then
+            composer validate --strict
+          else
+            echo "No composer.json yet — skipping validate"
+          fi
+
+      - name: Install dependencies
+        shell: bash
         run: |
           if [ -f composer.json ]; then
             composer install --prefer-dist --no-progress --no-interaction
@@ -29,20 +46,40 @@ jobs:
             echo "No composer.json yet — skipping install"
           fi
 
-      - name: Lint
+      - name: Lint (PHP-CS-Fixer)
+        shell: bash
+        env:
+          PHP_CS_FIXER_IGNORE_ENV: 1
         run: |
           if [ -x vendor/bin/php-cs-fixer ]; then
-            vendor/bin/php-cs-fixer check --diff
-          elif [ -x vendor/bin/pint ]; then
-            vendor/bin/pint --test
+            vendor/bin/php-cs-fixer fix --dry-run --diff
           else
-            echo "No linter installed — skipping"
+            echo "PHP-CS-Fixer not installed — skipping"
           fi
 
-      - name: Test
+      - name: Static analysis (PHPStan)
+        shell: bash
+        run: |
+          if [ -x vendor/bin/phpstan ]; then
+            vendor/bin/phpstan analyse --no-progress
+          else
+            echo "PHPStan not installed — skipping"
+          fi
+
+      - name: Security audit (composer audit)
+        shell: bash
+        run: |
+          if [ -f composer.json ]; then
+            composer audit --no-dev
+          else
+            echo "No composer.json yet — skipping audit"
+          fi
+
+      - name: Test (PHPUnit)
+        shell: bash
         run: |
           if [ -x vendor/bin/phpunit ]; then
-            vendor/bin/phpunit
+            vendor/bin/phpunit --testsuite=unit
           elif [ -x vendor/bin/pest ]; then
             vendor/bin/pest
           else
