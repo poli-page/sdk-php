@@ -22,7 +22,8 @@ final class RenderPreviewIntegrationTest extends TestCase
 {
     protected function setUp(): void
     {
-        if (getenv('POLI_PAGE_API_KEY') === false || getenv('POLI_PAGE_API_KEY') === '') {
+        $apiKey = getenv('POLI_PAGE_API_KEY');
+        if ($apiKey === false || $apiKey === '') {
             self::markTestSkipped('POLI_PAGE_API_KEY is not set');
         }
     }
@@ -30,29 +31,32 @@ final class RenderPreviewIntegrationTest extends TestCase
     public function testPreviewAgainstDevelop(): void
     {
         $apiKey = getenv('POLI_PAGE_API_KEY');
-        \assert(is_string($apiKey) && $apiKey !== '');
-        $baseUrl = getenv('POLI_PAGE_BASE_URL') ?: 'https://api-develop.poli.page';
-        \assert(is_string($baseUrl));
+        // setUp() guarantees a non-empty string; the assertion narrows for static analysis.
+        self::assertNotFalse($apiKey);
+        self::assertNotSame('', $apiKey);
 
-        $project = getenv('POLI_PAGE_TEST_PROJECT') ?: 'getting-started';
-        \assert(is_string($project));
-        $template = getenv('POLI_PAGE_TEST_TEMPLATE') ?: 'welcome';
-        \assert(is_string($template));
-        $version = getenv('POLI_PAGE_TEST_VERSION') ?: '1.0.0';
-        \assert(is_string($version));
-
-        $client = new PoliPage(apiKey: $apiKey, baseUrl: $baseUrl);
+        $client = new PoliPage(
+            apiKey: $apiKey,
+            baseUrl: self::envOrDefault('POLI_PAGE_BASE_URL', 'https://api-develop.poli.page'),
+        );
 
         $result = $client->render->preview(new ProjectModeInput(
-            project: $project,
-            template: $template,
+            project: self::envOrDefault('POLI_PAGE_TEST_PROJECT', 'getting-started'),
+            template: self::envOrDefault('POLI_PAGE_TEST_TEMPLATE', 'welcome'),
             data: ['name' => 'Integration Test'],
-            version: $version,
+            version: self::envOrDefault('POLI_PAGE_TEST_VERSION', '1.0.0'),
         ));
 
         self::assertNotSame('', $result->html);
         // Spec: short inline previews may render to 0 pages (mirror Node 30cf4fd).
         self::assertGreaterThanOrEqual(0, $result->totalPages);
         self::assertContains($result->environment, ['sandbox', 'live']);
+    }
+
+    private static function envOrDefault(string $name, string $default): string
+    {
+        $value = getenv($name);
+
+        return is_string($value) && $value !== '' ? $value : $default;
     }
 }

@@ -178,8 +178,7 @@ final class PoliPage implements Transport
         $lastError = null;
 
         while (true) {
-            if ($attempt > 0) {
-                \assert($lastError !== null);
+            if ($attempt > 0 && $lastError !== null) {
                 $delay = Backoff::compute($attempt, $this->retryDelay, $retryAfter, $this->jitterSource);
                 $this->fireOnRetry(new RetryEvent(
                     attempt: $attempt + 1,
@@ -198,10 +197,9 @@ final class PoliPage implements Transport
 
             $result = $this->sendOnce($method, $url, $path, $idempotencyKey, $bodyJson, $effectiveTimeout, $attempt + 1);
 
-            if ($result->response !== null) {
+            if ($result->isOk()) {
                 return $result->response;
             }
-            \assert($result->error !== null);
             $lastError = $result->error;
             $retryAfter = $result->retryAfter;
 

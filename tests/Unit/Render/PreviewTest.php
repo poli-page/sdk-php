@@ -23,7 +23,7 @@ final class PreviewTest extends TestCase
 {
     public function testProjectModePreviewSendsExpectedWireBody(): void
     {
-        $transport = $this->makeTransport(['html' => '<p>x</p>', 'totalPages' => 1, 'environment' => 'sandbox']);
+        $transport = new FakeTransport(['html' => '<p>x</p>', 'totalPages' => 1, 'environment' => 'sandbox']);
         $render = new Render($transport);
 
         $result = $render->preview(new ProjectModeInput(
@@ -57,7 +57,7 @@ final class PreviewTest extends TestCase
 
     public function testInlineModePreviewSendsTemplateAsHtml(): void
     {
-        $transport = $this->makeTransport(['html' => '<p>x</p>', 'totalPages' => 1, 'environment' => 'sandbox']);
+        $transport = new FakeTransport(['html' => '<p>x</p>', 'totalPages' => 1, 'environment' => 'sandbox']);
         $render = new Render($transport);
 
         $render->preview(new InlineModeInput(
@@ -76,7 +76,7 @@ final class PreviewTest extends TestCase
 
     public function testNullOptionalFieldsAreOmittedFromWireBody(): void
     {
-        $transport = $this->makeTransport(['html' => '', 'totalPages' => 0, 'environment' => 'sandbox']);
+        $transport = new FakeTransport(['html' => '', 'totalPages' => 0, 'environment' => 'sandbox']);
         $render = new Render($transport);
 
         $render->preview(new ProjectModeInput(
@@ -95,7 +95,7 @@ final class PreviewTest extends TestCase
 
     public function testIdempotencyKeyAndTimeoutAreStrippedFromWireBody(): void
     {
-        $transport = $this->makeTransport(['html' => '', 'totalPages' => 0, 'environment' => 'sandbox']);
+        $transport = new FakeTransport(['html' => '', 'totalPages' => 0, 'environment' => 'sandbox']);
         $render = new Render($transport);
 
         $render->preview(new ProjectModeInput(
@@ -116,7 +116,7 @@ final class PreviewTest extends TestCase
 
     public function testUnexpectedResponseShapeThrowsInternalError(): void
     {
-        $transport = $this->makeTransport(['html' => '<p>ok</p>']); // missing totalPages, environment
+        $transport = new FakeTransport(['html' => '<p>ok</p>']); // missing totalPages, environment
         $render = new Render($transport);
 
         $this->expectException(PoliPageException::class);
@@ -124,34 +124,33 @@ final class PreviewTest extends TestCase
 
         $render->preview(new InlineModeInput(template: '<p>x</p>', data: []));
     }
+}
+
+/**
+ * In-test transport stub: captures every call into a typed list so assertions
+ * can verify wire shape without touching PSR-18.
+ */
+final class FakeTransport implements Transport
+{
+    /** @var list<array{path: string, body: array<string, mixed>, idempotencyKey: ?string, timeout: ?float}> */
+    public array $calls = [];
 
     /**
      * @param array<array-key, mixed> $response
      */
-    private function makeTransport(array $response): Transport
+    public function __construct(private readonly array $response)
     {
-        return new class ($response) implements Transport {
-            /** @var list<array{path: string, body: array<string, mixed>, idempotencyKey: ?string, timeout: ?float}> */
-            public array $calls = [];
+    }
 
-            /**
-             * @param array<array-key, mixed> $response
-             */
-            public function __construct(private array $response)
-            {
-            }
+    public function post(string $path, array $body, ?string $idempotencyKey, ?float $timeout): array
+    {
+        $this->calls[] = [
+            'path' => $path,
+            'body' => $body,
+            'idempotencyKey' => $idempotencyKey,
+            'timeout' => $timeout,
+        ];
 
-            public function post(string $path, array $body, ?string $idempotencyKey, ?float $timeout): array
-            {
-                $this->calls[] = [
-                    'path' => $path,
-                    'body' => $body,
-                    'idempotencyKey' => $idempotencyKey,
-                    'timeout' => $timeout,
-                ];
-
-                return $this->response;
-            }
-        };
+        return $this->response;
     }
 }

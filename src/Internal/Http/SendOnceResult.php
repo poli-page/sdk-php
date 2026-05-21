@@ -24,4 +24,15 @@ final readonly class SendOnceResult
         public bool $retryable,
     ) {
     }
+
+    /**
+     * @phpstan-assert-if-true !null $this->response
+     * @phpstan-assert-if-true null  $this->error
+     * @phpstan-assert-if-false null  $this->response
+     * @phpstan-assert-if-false !null $this->error
+     */
+    public function isOk(): bool
+    {
+        return $this->response !== null;
+    }
 }

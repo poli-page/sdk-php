@@ -43,7 +43,6 @@ final class RenderMetadataTest extends TestCase
         $this->expectExceptionMessage("metadata value for key 'tags' must be a primitive");
 
         try {
-            /** @phpstan-ignore argument.type (test deliberately provides invalid input) */
             new RenderMetadata(['tags' => ['a', 'b']]);
         } catch (PoliPageException $e) {
             self::assertSame(PoliPageException::INVALID_OPTIONS, $e->errorCode);
@@ -55,14 +54,12 @@ final class RenderMetadataTest extends TestCase
     public function testRejectsObjectValue(): void
     {
         $this->expectException(PoliPageException::class);
-        /** @phpstan-ignore argument.type (test deliberately provides invalid input) */
         new RenderMetadata(['customer' => new \stdClass()]);
     }
 
     public function testRejectsNullValue(): void
     {
         $this->expectException(PoliPageException::class);
-        /** @phpstan-ignore argument.type (test deliberately provides invalid input) */
         new RenderMetadata(['locale' => null]);
     }
 }

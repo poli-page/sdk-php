@@ -14,7 +14,13 @@ namespace PoliPage;
 final readonly class RenderMetadata
 {
     /**
-     * @param array<string, scalar> $values
+     * `@param` is widened to `mixed` so the constructor's runtime check
+     * cannot be statically eliminated as dead code — this is the
+     * boundary where user-supplied data enters the SDK, and PHPStan
+     * with `treatPhpDocTypesAsCertain: true` would otherwise trust a
+     * narrower scalar annotation and remove the validation branch.
+     *
+     * @param array<string, mixed> $values
      *
      * @throws PoliPageException with code INVALID_OPTIONS when any value is not a primitive
      */
@@ -35,7 +41,7 @@ final readonly class RenderMetadata
     }
 
     /**
-     * @return array<string, scalar>
+     * @return array<string, mixed>
      */
     public function toArray(): array
     {
