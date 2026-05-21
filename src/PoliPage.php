@@ -161,6 +161,9 @@ final class PoliPage implements Transport
         return $decoded;
     }
 
+    /**
+     * @param 'GET'|'POST'|'DELETE' $method
+     */
     private function runWithRetry(
         string $method,
         string $path,
@@ -218,6 +221,9 @@ final class PoliPage implements Transport
         }
     }
 
+    /**
+     * @param 'GET'|'POST'|'DELETE' $method
+     */
     private function sendOnce(
         string $method,
         string $url,

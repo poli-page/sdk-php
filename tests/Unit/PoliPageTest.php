@@ -279,7 +279,10 @@ final class PoliPageTest extends TestCase
         return [$client, $mock, $factory];
     }
 
-    private function makeNetworkException(Psr17Factory $factory): NetworkExceptionInterface
+    /**
+     * @return \RuntimeException&NetworkExceptionInterface
+     */
+    private function makeNetworkException(Psr17Factory $factory): \RuntimeException
     {
         return new class ($factory->createRequest('POST', 'https://api.poli.page/v1/render/preview')) extends \RuntimeException implements NetworkExceptionInterface {
             public function __construct(private RequestInterface $request)

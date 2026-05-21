@@ -6,4 +6,7 @@ parameters:
     paths:
         - src
         - tests
-    treatPhpDocTypesAsCertain: false
+    # Trust PHPDoc generic types (array shapes, @var annotations) — required for
+    # the readonly DTOs and the testing seams to round-trip through array<…>
+    # without per-call assertions.
+    treatPhpDocTypesAsCertain: true
