@@ -17,8 +17,12 @@ final class SmokeTest extends TestCase
         self::assertTrue(class_exists(PoliPage::class));
     }
 
-    public function testVersionConstantIsDevPlaceholder(): void
+    public function testVersionConstantMatchesSemverShape(): void
     {
-        self::assertSame('0.0.0-dev', Version::VERSION);
+        // The actual value is bumped by the release flow; this test only
+        // guarantees the constant exists, is a non-empty string, and looks
+        // like a SemVer 2.0.0 tag (optional `-prerelease` suffix).
+        self::assertNotEmpty(Version::VERSION);
+        self::assertMatchesRegularExpression('/^\d+\.\d+\.\d+(-[A-Za-z0-9.\-]+)?$/', Version::VERSION);
     }
 }
