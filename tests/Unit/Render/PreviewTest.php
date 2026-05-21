@@ -130,7 +130,7 @@ final class PreviewTest extends TestCase
      */
     private function makeTransport(array $response): Transport
     {
-        return new class($response) implements Transport {
+        return new class ($response) implements Transport {
             /** @var list<array{path: string, body: array<string, mixed>, idempotencyKey: ?string, timeout: ?float}> */
             public array $calls = [];
 
