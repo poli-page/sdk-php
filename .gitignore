@@ -32,6 +32,9 @@ composer.lock
 .php-cs-fixer.cache
 .phpstan-cache/
 
+# Demo artefacts
+examples/output/
+
 # Go
 bin/
 *.test

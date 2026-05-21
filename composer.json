@@ -24,7 +24,8 @@
         "php-http/mock-client": "^1.6",
         "phpstan/phpstan": "^2.0",
         "phpstan/phpstan-strict-rules": "^2.0",
-        "phpunit/phpunit": "^11.0"
+        "phpunit/phpunit": "^11.0",
+        "symfony/http-client": "^6.4 || ^7.0"
     },
     "suggest": {
         "guzzlehttp/guzzle": "PSR-18 HTTP client (most common choice in PHP — ~80% of projects)",
@@ -35,7 +36,10 @@
     "autoload": {
         "psr-4": {
             "PoliPage\\": "src/"
-        }
+        },
+        "files": [
+            "src/render_to_file.php"
+        ]
     },
     "autoload-dev": {
         "psr-4": {
