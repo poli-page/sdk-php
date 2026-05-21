@@ -23,6 +23,7 @@ use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamFactoryInterface;
+use Psr\Http\Message\StreamInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 
@@ -129,6 +130,70 @@ final class PoliPage implements Transport
         $response = $this->runWithRetry('POST', $path, $key, $payload, $timeout);
 
         return $this->decodeJsonBody($response);
+    }
+
+    public function fetchBytes(string $url, ?float $timeout): string
+    {
+        $response = $this->sendUnauthenticatedGet($url, $timeout);
+        $body = (string) $response->getBody();
+        if ($body === '') {
+            throw new PoliPageException(
+                'PDF download response had an empty body',
+                PoliPageException::INTERNAL_ERROR,
+                $response->getStatusCode(),
+            );
+        }
+
+        return $body;
+    }
+
+    public function streamBytes(string $url, ?float $timeout): StreamInterface
+    {
+        $response = $this->sendUnauthenticatedGet($url, $timeout);
+        $stream = $response->getBody();
+        if ($stream->getSize() === 0) {
+            throw new PoliPageException(
+                'PDF download response had an empty body',
+                PoliPageException::INTERNAL_ERROR,
+                $response->getStatusCode(),
+            );
+        }
+
+        return $stream;
+    }
+
+    /**
+     * Single-shot, unauthenticated GET — used for the presigned S3 URLs
+     * returned by /v1/render. The SDK's auth headers, retry policy, and
+     * idempotency are deliberately bypassed because the URL is already
+     * signed and the storage endpoint does not honour any of them.
+     */
+    private function sendUnauthenticatedGet(string $url, ?float $timeout): ResponseInterface
+    {
+        unset($timeout); // PSR-18 doesn't standardise per-request timeouts; honour the user's client config.
+        $request = $this->requestFactory->createRequest('GET', $url);
+        try {
+            $response = $this->httpClient->sendRequest($request);
+        } catch (ClientExceptionInterface $e) {
+            throw new PoliPageException(
+                'Failed to download PDF: ' . $e->getMessage(),
+                PoliPageException::DOWNLOAD_FAILED,
+                null,
+                null,
+                $e,
+            );
+        }
+
+        $status = $response->getStatusCode();
+        if ($status < 200 || $status >= 300) {
+            throw new PoliPageException(
+                sprintf('Failed to download PDF: %d %s', $status, $response->getReasonPhrase()),
+                PoliPageException::DOWNLOAD_FAILED,
+                $status,
+            );
+        }
+
+        return $response;
     }
 
     /**

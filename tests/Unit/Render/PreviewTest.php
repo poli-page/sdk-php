@@ -8,12 +8,12 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use PoliPage\InlineModeInput;
 use PoliPage\Internal\Constants;
-use PoliPage\Internal\Transport;
 use PoliPage\PoliPageException;
 use PoliPage\PreviewResult;
 use PoliPage\ProjectModeInput;
 use PoliPage\Render;
 use PoliPage\RenderMetadata;
+use PoliPage\Tests\Support\FakeTransport;
 
 #[CoversClass(Render::class)]
 #[CoversClass(ProjectModeInput::class)]
@@ -23,7 +23,8 @@ final class PreviewTest extends TestCase
 {
     public function testProjectModePreviewSendsExpectedWireBody(): void
     {
-        $transport = new FakeTransport(['html' => '<p>x</p>', 'totalPages' => 1, 'environment' => 'sandbox']);
+        $transport = new FakeTransport();
+        $transport->postResponse = ['html' => '<p>x</p>', 'totalPages' => 1, 'environment' => 'sandbox'];
         $render = new Render($transport);
 
         $result = $render->preview(new ProjectModeInput(
@@ -39,8 +40,8 @@ final class PreviewTest extends TestCase
         self::assertSame(1, $result->totalPages);
         self::assertSame('sandbox', $result->environment);
 
-        self::assertCount(1, $transport->calls);
-        $call = $transport->calls[0];
+        self::assertCount(1, $transport->postCalls);
+        $call = $transport->postCalls[0];
         self::assertSame(Constants::PATH_RENDER_PREVIEW, $call['path']);
         self::assertSame('idem-abc', $call['idempotencyKey']);
         self::assertSame(
@@ -57,7 +58,8 @@ final class PreviewTest extends TestCase
 
     public function testInlineModePreviewSendsTemplateAsHtml(): void
     {
-        $transport = new FakeTransport(['html' => '<p>x</p>', 'totalPages' => 1, 'environment' => 'sandbox']);
+        $transport = new FakeTransport();
+        $transport->postResponse = ['html' => '<p>x</p>', 'totalPages' => 1, 'environment' => 'sandbox'];
         $render = new Render($transport);
 
         $render->preview(new InlineModeInput(
@@ -65,7 +67,7 @@ final class PreviewTest extends TestCase
             data: ['name' => 'Alice'],
         ));
 
-        $call = $transport->calls[0];
+        $call = $transport->postCalls[0];
         self::assertSame(
             ['template' => '<p>{{ name }}</p>', 'data' => ['name' => 'Alice']],
             $call['body'],
@@ -76,7 +78,8 @@ final class PreviewTest extends TestCase
 
     public function testNullOptionalFieldsAreOmittedFromWireBody(): void
     {
-        $transport = new FakeTransport(['html' => '', 'totalPages' => 0, 'environment' => 'sandbox']);
+        $transport = new FakeTransport();
+        $transport->postResponse = ['html' => '', 'totalPages' => 0, 'environment' => 'sandbox'];
         $render = new Render($transport);
 
         $render->preview(new ProjectModeInput(
@@ -85,7 +88,7 @@ final class PreviewTest extends TestCase
             data: [],
         ));
 
-        $call = $transport->calls[0];
+        $call = $transport->postCalls[0];
         self::assertArrayNotHasKey('version', $call['body']);
         self::assertArrayNotHasKey('format', $call['body']);
         self::assertArrayNotHasKey('orientation', $call['body']);
@@ -95,7 +98,8 @@ final class PreviewTest extends TestCase
 
     public function testIdempotencyKeyAndTimeoutAreStrippedFromWireBody(): void
     {
-        $transport = new FakeTransport(['html' => '', 'totalPages' => 0, 'environment' => 'sandbox']);
+        $transport = new FakeTransport();
+        $transport->postResponse = ['html' => '', 'totalPages' => 0, 'environment' => 'sandbox'];
         $render = new Render($transport);
 
         $render->preview(new ProjectModeInput(
@@ -106,7 +110,7 @@ final class PreviewTest extends TestCase
             timeout: 5.0,
         ));
 
-        $call = $transport->calls[0];
+        $call = $transport->postCalls[0];
         self::assertArrayNotHasKey('idempotencyKey', $call['body']);
         self::assertArrayNotHasKey('timeout', $call['body']);
         // But they are propagated to the transport call:
@@ -116,41 +120,13 @@ final class PreviewTest extends TestCase
 
     public function testUnexpectedResponseShapeThrowsInternalError(): void
     {
-        $transport = new FakeTransport(['html' => '<p>ok</p>']); // missing totalPages, environment
+        $transport = new FakeTransport();
+        $transport->postResponse = ['html' => '<p>ok</p>']; // missing totalPages, environment
         $render = new Render($transport);
 
         $this->expectException(PoliPageException::class);
         $this->expectExceptionMessage('Unexpected preview response shape');
 
         $render->preview(new InlineModeInput(template: '<p>x</p>', data: []));
-    }
-}
-
-/**
- * In-test transport stub: captures every call into a typed list so assertions
- * can verify wire shape without touching PSR-18.
- */
-final class FakeTransport implements Transport
-{
-    /** @var list<array{path: string, body: array<string, mixed>, idempotencyKey: ?string, timeout: ?float}> */
-    public array $calls = [];
-
-    /**
-     * @param array<array-key, mixed> $response
-     */
-    public function __construct(private readonly array $response)
-    {
-    }
-
-    public function post(string $path, array $body, ?string $idempotencyKey, ?float $timeout): array
-    {
-        $this->calls[] = [
-            'path' => $path,
-            'body' => $body,
-            'idempotencyKey' => $idempotencyKey,
-            'timeout' => $timeout,
-        ];
-
-        return $this->response;
     }
 }
