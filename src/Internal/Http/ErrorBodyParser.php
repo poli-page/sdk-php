@@ -37,8 +37,8 @@ final class ErrorBodyParser
     }
 
     /**
-     * @param array<string, mixed> $json
-     * @param list<string>         $fields
+     * @param array<array-key, mixed> $json
+     * @param list<string>            $fields
      */
     private static function firstStringField(array $json, array $fields): ?string
     {
