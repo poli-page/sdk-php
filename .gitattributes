@@ -1,0 +1,11 @@
+# Force LF line endings on checkout for every text file so PHP-CS-Fixer
+# stays consistent across Linux, macOS, and Windows runners (see CI).
+* text=auto eol=lf
+
+# Binary catch-alls — guard against accidental EOL normalisation.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
