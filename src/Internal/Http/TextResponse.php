@@ -15,7 +15,7 @@ namespace PoliPage\Internal\Http;
 final readonly class TextResponse
 {
     /**
-     * @param array<string, array<int, string>> $headers PSR-7 shape: name → values (PSR-7 doesn't promise list-ness)
+     * @param array<string, array<int, string>> $headers PSR-7's `MessageInterface::getHeaders()` shape
      */
     public function __construct(
         public string $body,

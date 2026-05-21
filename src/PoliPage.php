@@ -145,10 +145,16 @@ final class PoliPage implements Transport
     public function getText(string $path, ?float $timeout): TextResponse
     {
         $response = $this->runWithRetry('GET', $path, null, null, $timeout);
+        // PSR-7 stubs type getHeaders() loosely (outer key as array-key); at
+        // runtime every implementation we care about ships string header
+        // names. Narrow explicitly via @var so TextResponse's strict shape
+        // is preserved.
+        /** @var array<string, array<int, string>> $headers */
+        $headers = $response->getHeaders();
 
         return new TextResponse(
             body: (string) $response->getBody(),
-            headers: $response->getHeaders(),
+            headers: $headers,
         );
     }
 
