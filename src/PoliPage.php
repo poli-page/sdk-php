@@ -14,6 +14,7 @@ use PoliPage\Internal\Http\ErrorBodyParser;
 use PoliPage\Internal\Http\Headers;
 use PoliPage\Internal\Http\RetryAfterParser;
 use PoliPage\Internal\Http\SendOnceResult;
+use PoliPage\Internal\Http\TextResponse;
 use PoliPage\Internal\Http\UrlBuilder;
 use PoliPage\Internal\Transport;
 use PoliPage\Internal\Uuid\Uuid4;
@@ -47,6 +48,7 @@ use Psr\Log\NullLogger;
 final class PoliPage implements Transport
 {
     public readonly Render $render;
+    public readonly Documents $documents;
 
     private readonly string $apiKey;
     private readonly string $baseUrl;
@@ -101,6 +103,7 @@ final class PoliPage implements Transport
         $this->userAgent = Constants::USER_AGENT_PREFIX . Version::VERSION;
         $this->jitterSource = $jitterSource;
         $this->render = new Render($this);
+        $this->documents = new Documents($this);
     }
 
     /**
@@ -130,6 +133,28 @@ final class PoliPage implements Transport
         $response = $this->runWithRetry('POST', $path, $key, $payload, $timeout);
 
         return $this->decodeJsonBody($response);
+    }
+
+    public function get(string $path, ?float $timeout): array
+    {
+        $response = $this->runWithRetry('GET', $path, null, null, $timeout);
+
+        return $this->decodeJsonBody($response);
+    }
+
+    public function getText(string $path, ?float $timeout): TextResponse
+    {
+        $response = $this->runWithRetry('GET', $path, null, null, $timeout);
+
+        return new TextResponse(
+            body: (string) $response->getBody(),
+            headers: $response->getHeaders(),
+        );
+    }
+
+    public function delete(string $path, ?float $timeout): void
+    {
+        $this->runWithRetry('DELETE', $path, null, null, $timeout);
     }
 
     public function fetchBytes(string $url, ?float $timeout): string

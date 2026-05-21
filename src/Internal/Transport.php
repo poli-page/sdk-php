@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PoliPage\Internal;
 
+use PoliPage\Internal\Http\TextResponse;
 use Psr\Http\Message\StreamInterface;
 
 /**
@@ -11,11 +12,11 @@ use Psr\Http\Message\StreamInterface;
  * can be unit-tested without spinning up a PSR-18 mock. PoliPage implements
  * this interface; tests inject a hand-rolled fake.
  *
- * `post` carries auth + retry + idempotency + hook firing. `fetchBytes` and
- * `streamBytes` target presigned S3 URLs — unauthenticated, single attempt,
- * no retry, no idempotency. The four-verb design decision (n2 design memory)
- * means we accept the surface up-front; `get` and `delete` join in Phase 4
- * when Documents lands.
+ * `post` / `get` / `delete` carry auth + retry + idempotency + hook firing.
+ * `getText` is the JSON-less variant used by `Documents::preview`, exposing
+ * the raw body plus the relevant response headers in a tiny carrier.
+ * `fetchBytes` and `streamBytes` target presigned S3 URLs —
+ * unauthenticated, single attempt, no retry.
  *
  * @internal Not part of the public API.
  */
@@ -30,6 +31,25 @@ interface Transport
      * @return array<array-key, mixed>
      */
     public function post(string $path, array $body, ?string $idempotencyKey, ?float $timeout): array;
+
+    /**
+     * Send an authenticated GET and return the decoded JSON body.
+     *
+     * @return array<array-key, mixed>
+     */
+    public function get(string $path, ?float $timeout): array;
+
+    /**
+     * Send an authenticated GET and return the raw body + headers, used
+     * for endpoints that respond with `text/html` rather than JSON
+     * (currently only `/v1/documents/:id/preview`).
+     */
+    public function getText(string $path, ?float $timeout): TextResponse;
+
+    /**
+     * Send an authenticated DELETE and ignore the response body.
+     */
+    public function delete(string $path, ?float $timeout): void;
 
     /**
      * Fetch the body bytes of an arbitrary URL — used to download PDFs from
