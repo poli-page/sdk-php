@@ -19,16 +19,6 @@ use PoliPage\Exception\TimeoutException;
 use PoliPage\PoliPageException;
 
 #[CoversClass(PoliPageException::class)]
-#[CoversClass(ConnectionException::class)]
-#[CoversClass(TimeoutException::class)]
-#[CoversClass(ApiStatusException::class)]
-#[CoversClass(BadRequestException::class)]
-#[CoversClass(AuthenticationException::class)]
-#[CoversClass(PermissionDeniedException::class)]
-#[CoversClass(NotFoundException::class)]
-#[CoversClass(GoneException::class)]
-#[CoversClass(RateLimitException::class)]
-#[CoversClass(InternalServerException::class)]
 final class PoliPageExceptionTest extends TestCase
 {
     public function testBaseExtendsRuntimeException(): void

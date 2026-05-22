@@ -115,11 +115,15 @@ jobs:
       # to production, and the library declares no concrete HTTP client —
       # what's actually in `vendor/` at release time is whatever ships in the
       # release artefact via Packagist, so the full scan is the honest check.
+      #
+      # `--abandoned=report` lists abandoned packages without failing CI —
+      # abandonment is a maintenance signal, not a security advisory. Real
+      # CVEs still fail the step.
       - name: Security audit (composer audit)
         shell: bash
         run: |
           if [ -f composer.json ]; then
-            composer audit
+            composer audit --abandoned=report
           else
             echo "No composer.json yet — skipping audit"
           fi

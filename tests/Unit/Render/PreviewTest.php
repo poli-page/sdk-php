@@ -9,16 +9,12 @@ use PHPUnit\Framework\TestCase;
 use PoliPage\InlineModeInput;
 use PoliPage\Internal\Constants;
 use PoliPage\PoliPageException;
-use PoliPage\PreviewResult;
 use PoliPage\ProjectModeInput;
 use PoliPage\Render;
 use PoliPage\RenderMetadata;
 use PoliPage\Tests\Support\FakeTransport;
 
 #[CoversClass(Render::class)]
-#[CoversClass(ProjectModeInput::class)]
-#[CoversClass(InlineModeInput::class)]
-#[CoversClass(PreviewResult::class)]
 final class PreviewTest extends TestCase
 {
     public function testProjectModePreviewSendsExpectedWireBody(): void

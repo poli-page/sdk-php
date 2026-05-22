@@ -6,13 +6,11 @@ namespace PoliPage\Tests\Unit\Documents;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use PoliPage\DocumentPreviewResult;
 use PoliPage\Documents;
 use PoliPage\Internal\Http\TextResponse;
 use PoliPage\Tests\Support\FakeTransport;
 
 #[CoversClass(Documents::class)]
-#[CoversClass(DocumentPreviewResult::class)]
 final class PreviewTest extends TestCase
 {
     public function testReadsBodyAndPageCountHeader(): void

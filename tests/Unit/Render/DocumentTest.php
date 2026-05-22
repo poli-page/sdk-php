@@ -6,14 +6,12 @@ namespace PoliPage\Tests\Unit\Render;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use PoliPage\DocumentDescriptor;
 use PoliPage\Internal\Constants;
 use PoliPage\ProjectModeInput;
 use PoliPage\Render;
 use PoliPage\Tests\Support\FakeTransport;
 
 #[CoversClass(Render::class)]
-#[CoversClass(DocumentDescriptor::class)]
 final class DocumentTest extends TestCase
 {
     public function testDocumentPostsToRenderEndpointAndParsesDescriptor(): void

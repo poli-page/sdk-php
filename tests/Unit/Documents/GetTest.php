@@ -6,12 +6,10 @@ namespace PoliPage\Tests\Unit\Documents;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use PoliPage\DocumentDescriptor;
 use PoliPage\Documents;
 use PoliPage\Tests\Support\FakeTransport;
 
 #[CoversClass(Documents::class)]
-#[CoversClass(DocumentDescriptor::class)]
 final class GetTest extends TestCase
 {
     public function testGetsDocumentByIdAndReturnsDescriptor(): void

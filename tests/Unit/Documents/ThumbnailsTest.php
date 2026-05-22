@@ -9,12 +9,9 @@ use PHPUnit\Framework\TestCase;
 use PoliPage\Documents;
 use PoliPage\PoliPageException;
 use PoliPage\Tests\Support\FakeTransport;
-use PoliPage\Thumbnail;
 use PoliPage\ThumbnailOptions;
 
 #[CoversClass(Documents::class)]
-#[CoversClass(Thumbnail::class)]
-#[CoversClass(ThumbnailOptions::class)]
 final class ThumbnailsTest extends TestCase
 {
     public function testWrapsOptionsAndUnwrapsResponse(): void
