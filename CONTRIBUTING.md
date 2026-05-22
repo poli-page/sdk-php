@@ -55,19 +55,35 @@ order called out by the cross-SDK porter checklist; see
 
 ## Releasing
 
-Releases are **manual** and gated by `scripts/release.sh` (work in
-progress for Phase 7). Packagist auto-publishes on tag push via its
-GitHub webhook — there is no separate publish step. Until the script
-lands, the procedure is:
+Releases are **manual** and gated by `scripts/release.sh`. Packagist
+auto-publishes on tag push via its GitHub webhook — there is no
+separate publish step. The script runs every CI gate locally, prompts
+for confirmation, and creates a local annotated tag; pushing the tag
+is left to you so you stay in the loop.
 
 1. Bump `VERSION` in `src/Internal/Version.php`.
 2. Move `[Unreleased]` → `[X.Y.Z] - YYYY-MM-DD` in `CHANGELOG.md`.
 3. If a MAJOR bump, add a section to `MIGRATION.md`.
-4. Commit `chore(release): X.Y.Z` on a clean main branch.
-5. Run the full CI gate locally: `composer ci`.
-6. Tag locally: `git tag vX.Y.Z`.
-7. Push the tag manually when ready: `git push origin vX.Y.Z`.
-8. Packagist's webhook indexes the new version within seconds.
+4. Commit `chore(release): X.Y.Z` on a clean main branch and push.
+5. Run the release script (dry-run first if you want):
+   ```bash
+   ./scripts/release.sh --dry-run    # everything except the tag
+   ./scripts/release.sh              # interactive
+   ```
+6. Push the tag when ready: `git push origin vX.Y.Z`.
+7. Packagist's webhook indexes the new version within seconds.
+
+### Local pre-push hook
+
+`scripts/install-hooks.sh` installs a `.git/hooks/pre-push` that runs
+the same CI gate before every push, so you can't accidentally land a
+broken main:
+
+```bash
+./scripts/install-hooks.sh
+# to skip in an emergency (doc-only changes etc.):
+SKIP_PRE_PUSH=1 git push
+```
 
 ### Stable vs. prerelease channels
 
