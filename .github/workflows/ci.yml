@@ -5,24 +5,39 @@ on:
   pull_request:
     branches: [main]
 
+# Default to read-only token; jobs that need more grant it explicitly.
+permissions:
+  contents: read
+
 jobs:
   test:
-    name: PHP ${{ matrix.php-version }} on ${{ matrix.os }}
+    name: PHP ${{ matrix.php-version }} (${{ matrix.deps }}) on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
         php-version: ['8.3', '8.4', '8.5']
+        # Two-axis dep matrix: library convention without a lockfile is to
+        # exercise both ends of the resolved constraint range. `stable` =
+        # newest matching versions; `lowest` = oldest still resolvable.
+        deps: [stable, lowest]
         include:
+          # macOS + Windows on the newest supported PHP only — keeps CI
+          # under ten jobs while still proving cross-OS portability.
           - os: macos-latest
             php-version: '8.5'
+            deps: stable
           - os: windows-latest
             php-version: '8.5'
+            deps: stable
     steps:
-      - uses: actions/checkout@v4
+      # SHA-pinned third-party actions per cross-SDK security policy. Refresh
+      # via `gh api repos/<owner>/<repo>/git/refs/tags/<tag> --jq .object.sha`
+      # and bump the trailing `# vX.Y.Z` comment in the same commit.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@8358ee0e2e8afe63c2fb8253d1d52085811ab1e5 # v2
         with:
           php-version: ${{ matrix.php-version }}
           coverage: none
@@ -37,11 +52,22 @@ jobs:
             echo "No composer.json yet — skipping validate"
           fi
 
+      # `--no-scripts` defangs install/update lifecycle hooks in compromised
+      # transitive deps. Library, no autoloader-touching scripts of our own,
+      # so this is safe. `composer update` (not install) is required because
+      # we do not commit composer.lock — install behaves equivalently with no
+      # lock, but update is explicit about the resolved-on-the-fly intent.
       - name: Install dependencies
         shell: bash
         run: |
           if [ -f composer.json ]; then
-            composer install --prefer-dist --no-progress --no-interaction
+            if [ "${{ matrix.deps }}" = "lowest" ]; then
+              composer update --prefer-lowest --prefer-stable \
+                --no-progress --no-interaction --no-scripts
+            else
+              composer update --prefer-stable \
+                --no-progress --no-interaction --no-scripts
+            fi
           else
             echo "No composer.json yet — skipping install"
           fi
@@ -66,11 +92,34 @@ jobs:
             echo "PHPStan not installed — skipping"
           fi
 
+      # Belt-and-suspenders for the sealed-class enforcement: files under
+      # tests/static-analysis/should_fail/ MUST fail PHPStan. If they ever
+      # pass, the type-system contract has regressed.
+      - name: Static analysis must-fail samples
+        shell: bash
+        run: |
+          if [ -x vendor/bin/phpstan ] && [ -d tests/static-analysis/should_fail ]; then
+            if vendor/bin/phpstan analyse tests/static-analysis/should_fail \
+                --error-format=raw --no-progress > /tmp/should_fail.out 2>&1; then
+              echo "::error::PHPStan accepted tests/static-analysis/should_fail/ — sealed-class enforcement has regressed."
+              cat /tmp/should_fail.out
+              exit 1
+            else
+              echo "PHPStan correctly rejected the must-fail samples."
+            fi
+          else
+            echo "PHPStan or must-fail dir missing — skipping"
+          fi
+
+      # Full advisory scan (dev deps included). Dev-env compromises can leak
+      # to production, and the library declares no concrete HTTP client —
+      # what's actually in `vendor/` at release time is whatever ships in the
+      # release artefact via Packagist, so the full scan is the honest check.
       - name: Security audit (composer audit)
         shell: bash
         run: |
           if [ -f composer.json ]; then
-            composer audit --no-dev
+            composer audit
           else
             echo "No composer.json yet — skipping audit"
           fi
@@ -85,3 +134,31 @@ jobs:
           else
             echo "No test runner installed — skipping"
           fi
+
+      # Install-smoke: prove the package is installable via Composer from a
+      # clean directory and that the documented one-liner reaches a working
+      # PSR-18 client through discovery. Runs only on ubuntu/stable to keep
+      # matrix cost down — the install path is OS-independent.
+      - name: Install-smoke (composer install poli-page/sdk + autoload check)
+        if: matrix.os == 'ubuntu-latest' && matrix.deps == 'stable'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f composer.json ]; then
+            echo "No composer.json yet — skipping smoke"
+            exit 0
+          fi
+          smoke="$(mktemp -d)"
+          cp -R . "$smoke/sdk-checkout"
+          mkdir -p "$smoke/consumer"
+          cd "$smoke/consumer"
+          composer init --no-interaction --name="smoke/consumer" --stability="dev"
+          composer config repositories.local path "$smoke/sdk-checkout"
+          composer require --no-progress --no-interaction --no-scripts \
+            "poli-page/sdk:*@dev" \
+            "symfony/http-client:^7.0" \
+            "nyholm/psr7:^1.8"
+          php -r 'require "vendor/autoload.php";
+            $c = PoliPage\PoliPage::client("pp_test_smoke");
+            if (!$c instanceof PoliPage\PoliPage) { fwrite(STDERR, "smoke failed\n"); exit(1); }
+            echo "smoke: PoliPage\\PoliPage class autoloads + constructs OK\n";'

@@ -1,0 +1,58 @@
+name: Integration
+
+on:
+  # Nightly sweep against the develop API to catch upstream drift before
+  # users do — the SDK retry / classifier code is wire-shape sensitive.
+  schedule:
+    - cron: "0 4 * * *"   # 04:00 UTC daily
+  # Re-run on every push to main so a freshly-merged change can't break
+  # the integration contract silently.
+  push:
+    branches: [main]
+  # And let maintainers kick it off manually for ad-hoc validation.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: integration (PHP ${{ matrix.php-version }})
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.repository == 'poli-page/sdk-php' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ['8.3', '8.5']  # one near-floor + one near-ceiling
+    env:
+      POLI_PAGE_API_KEY: ${{ secrets.POLI_PAGE_API_KEY }}
+      POLI_PAGE_BASE_URL: ${{ secrets.POLI_PAGE_BASE_URL || 'https://api-develop.poli.page' }}
+      # Optional: pin the template the integration suite renders against.
+      POLI_PAGE_TEST_PROJECT: ${{ secrets.POLI_PAGE_TEST_PROJECT }}
+      POLI_PAGE_TEST_TEMPLATE: ${{ secrets.POLI_PAGE_TEST_TEMPLATE }}
+      POLI_PAGE_TEST_VERSION: ${{ secrets.POLI_PAGE_TEST_VERSION }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: shivammathur/setup-php@8358ee0e2e8afe63c2fb8253d1d52085811ab1e5 # v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Skip when no API key is available
+        if: env.POLI_PAGE_API_KEY == ''
+        run: |
+          echo "POLI_PAGE_API_KEY secret is not set on this runner — skipping integration suite."
+          echo "Configure repository secrets > POLI_PAGE_API_KEY to enable nightly runs."
+          exit 0
+
+      - name: Install dependencies
+        if: env.POLI_PAGE_API_KEY != ''
+        run: |
+          composer update --prefer-stable --no-progress --no-interaction --no-scripts
+
+      - name: Run integration suite
+        if: env.POLI_PAGE_API_KEY != ''
+        run: |
+          vendor/bin/phpunit --testsuite=integration

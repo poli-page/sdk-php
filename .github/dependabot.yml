@@ -1,0 +1,51 @@
+version: 2
+updates:
+  # Composer dependencies (PHP packages in composer.json)
+  - package-ecosystem: composer
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - composer
+    commit-message:
+      prefix: "chore(deps)"
+      include: scope
+    groups:
+      # Bundle minor + patch bumps together so dev / minor noise lands in one PR
+      # per ecosystem rather than one per package.
+      php-dev:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # GitHub Actions versions in .github/workflows/*.yml
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Europe/Paris
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: "chore(ci)"
+      include: scope
+    groups:
+      actions-dev:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch

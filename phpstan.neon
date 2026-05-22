@@ -6,6 +6,12 @@ parameters:
     paths:
         - src
         - tests
+    excludePaths:
+        analyse:
+            # tests/static-analysis/should_fail/ contains files PHPStan MUST
+            # reject — they're driven by a separate CI step that inverts the
+            # exit code. Including them in the main analyse run would always fail.
+            - tests/static-analysis/should_fail/*
     # Trust PHPDoc generic types (array shapes, @var annotations) — required for
     # the readonly DTOs and the testing seams to round-trip through array<…>
     # without per-call assertions.
