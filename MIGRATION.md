@@ -72,4 +72,4 @@ database; fetch bytes on demand via `$client->documents->get($id)->downloadPdf()
 The presigned URL is short-lived (15 min) — refresh via `documents->get`
 when needed.
 
-See [CHANGELOG.md](CHANGELOG.md) for the full per-feature list.
+See [CHANGELOG.md](https://github.com/poli-page/sdk-php/blob/main/CHANGELOG.md) for the full per-feature list.

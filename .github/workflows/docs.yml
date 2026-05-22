@@ -1,0 +1,78 @@
+name: Docs
+
+on:
+  # Anything that changes the rendered site — narrative content, theme/nav
+  # config, or the two repo-root files snippet'd in by pymdownx.snippets.
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "CHANGELOG.md"
+      - "MIGRATION.md"
+      - ".github/workflows/docs.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Pages is single-tenant per repo: serialise deploys instead of cancelling,
+# so a release-triggered build can't be killed by a follow-up doc push.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # SHA-pinned third-party actions per cross-SDK security policy. Refresh
+      # via `gh api repos/<owner>/<repo>/git/refs/tags/<tag> --jq .object.sha`
+      # and bump the trailing `# vX.Y.Z` comment in the same commit.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install MkDocs + Material theme
+        run: |
+          python -m pip install --upgrade pip
+          pip install --only-binary=:all: mkdocs-material
+
+      # `--strict` turns MkDocs warnings into errors (broken internal links,
+      # orphan pages, missing nav targets) and combines with the snippets
+      # extension's `check_paths: true` to make a missing CHANGELOG.md or
+      # MIGRATION.md fail the build instead of silently shipping holes.
+      - name: Build site
+        run: mkdocs build --strict
+
+      # Belt-and-suspenders: even with --strict, refuse to publish if the
+      # entrypoint went missing for any reason.
+      - name: Verify MkDocs produced an index
+        run: |
+          set -euo pipefail
+          if [ ! -s site/index.html ]; then
+            echo "mkdocs did not emit site/index.html — refusing to deploy an empty site." >&2
+            ls -la site || true
+            exit 1
+          fi
+
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
