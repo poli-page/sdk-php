@@ -52,11 +52,14 @@ final readonly class DocumentDescriptor
      * a fresh fetch every time; the URL has a 15-minute TTL — call
      * `$client->documents->get($this->documentId)->downloadPdf()` to refresh.
      *
-     * @throws PoliPageException with code DOWNLOAD_FAILED on non-2xx or transport failure
+     * @param float|null $timeout per-call timeout in seconds; `null` defers to the client default
+     *
+     * @throws Exception\TimeoutException     when the underlying client reports a timeout (Guzzle: cURL error 28)
+     * @throws PoliPageException              with code DOWNLOAD_FAILED on non-2xx or transport failure
      */
-    public function downloadPdf(): string
+    public function downloadPdf(?float $timeout = null): string
     {
-        return $this->transport->fetchBytes($this->presignedPdfUrl, null);
+        return $this->transport->fetchBytes($this->presignedPdfUrl, $timeout);
     }
 
     /**

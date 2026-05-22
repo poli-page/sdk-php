@@ -54,7 +54,10 @@ final class Documents
      */
     public function preview(string $id): DocumentPreviewResult
     {
-        $response = $this->transport->getText(self::pathFor($id) . '/preview', null);
+        $response = $this->transport->getText(
+            sprintf(Constants::PATH_DOCUMENT_PREVIEW, rawurlencode($id)),
+            null,
+        );
         $pageCount = self::parsePageCount($response->header(Constants::HEADER_DOCUMENT_PAGE_COUNT));
 
         return new DocumentPreviewResult(
@@ -80,7 +83,7 @@ final class Documents
     public function thumbnails(string $id, ThumbnailOptions $options): array
     {
         $response = $this->transport->post(
-            self::pathFor($id) . '/thumbnails',
+            sprintf(Constants::PATH_DOCUMENT_THUMBNAILS, rawurlencode($id)),
             ['thumbnails' => $options->toWire()],
             null,
             null,

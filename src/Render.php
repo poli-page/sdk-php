@@ -37,7 +37,7 @@ final class Render
      */
     public function pdf(ProjectModeInput $input): string
     {
-        return $this->document($input)->downloadPdf();
+        return $this->document($input)->downloadPdf($input->timeout);
     }
 
     /**

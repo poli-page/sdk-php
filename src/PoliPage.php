@@ -15,6 +15,7 @@ use PoliPage\Internal\Http\Headers;
 use PoliPage\Internal\Http\RetryAfterParser;
 use PoliPage\Internal\Http\SendOnceResult;
 use PoliPage\Internal\Http\TextResponse;
+use PoliPage\Internal\Http\TimeoutPolicy;
 use PoliPage\Internal\Http\UrlBuilder;
 use PoliPage\Internal\Transport;
 use PoliPage\Internal\Uuid\Uuid4;
@@ -181,31 +182,33 @@ final class PoliPage implements Transport
     public function streamBytes(string $url, ?float $timeout): StreamInterface
     {
         $response = $this->sendUnauthenticatedGet($url, $timeout);
-        $stream = $response->getBody();
-        if ($stream->getSize() === 0) {
-            throw new PoliPageException(
-                'PDF download response had an empty body',
-                PoliPageException::INTERNAL_ERROR,
-                $response->getStatusCode(),
-            );
-        }
 
-        return $stream;
+        // No size sanity check: PSR-7 streams may report `getSize() === null`
+        // (chunked transfer, unknown content-length) and zero-length 2xx
+        // responses would surface as `eof()` immediately on the caller side
+        // anyway. Errors are caught upstream in sendUnauthenticatedGet.
+        return $response->getBody();
     }
 
     /**
      * Single-shot, unauthenticated GET — used for the presigned S3 URLs
      * returned by /v1/render. The SDK's auth headers, retry policy, and
      * idempotency are deliberately bypassed because the URL is already
-     * signed and the storage endpoint does not honour any of them.
+     * signed and the storage endpoint does not honour any of them. The
+     * caller's `$timeout` is applied via {@see TimeoutPolicy::send}.
      */
     private function sendUnauthenticatedGet(string $url, ?float $timeout): ResponseInterface
     {
-        unset($timeout); // PSR-18 doesn't standardise per-request timeouts; honour the user's client config.
         $request = $this->requestFactory->createRequest('GET', $url);
         try {
-            $response = $this->httpClient->sendRequest($request);
+            $response = TimeoutPolicy::send($this->httpClient, $request, $timeout);
         } catch (ClientExceptionInterface $e) {
+            if (TimeoutPolicy::isTimeout($e)) {
+                throw ExceptionClassifier::timeout(
+                    sprintf('PDF download timed out after %.1fs: %s', (float) $timeout, $e->getMessage()),
+                    $e,
+                );
+            }
             throw new PoliPageException(
                 'Failed to download PDF: ' . $e->getMessage(),
                 PoliPageException::DOWNLOAD_FAILED,
@@ -341,9 +344,14 @@ final class PoliPage implements Transport
         $startedAt = microtime(true);
 
         try {
-            $response = $this->httpClient->sendRequest($request);
+            $response = TimeoutPolicy::send($this->httpClient, $request, $timeout);
         } catch (ClientExceptionInterface $e) {
-            $error = ExceptionClassifier::networkError($e->getMessage(), $e);
+            $error = TimeoutPolicy::isTimeout($e)
+                ? ExceptionClassifier::timeout(
+                    sprintf('Request timed out after %.1fs: %s', $timeout, $e->getMessage()),
+                    $e,
+                )
+                : ExceptionClassifier::networkError($e->getMessage(), $e);
 
             return new SendOnceResult(null, $error, null, true);
         }
