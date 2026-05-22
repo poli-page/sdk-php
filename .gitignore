@@ -35,6 +35,22 @@ composer.lock
 # Demo artefacts
 examples/output/
 
+# PHPUnit coverage output (when run with --coverage-*)
+coverage/
+.coverage/
+
+# Claude Code agent state (project-local settings, scheduled-task lock)
+.claude/
+
+# Internal authoring notes — kept locally for cross-language porting, never
+# committed to the public SDK repo (they reference absolute paths on the
+# author's machine and the cross-SDK roadmap which lives in the platform repo).
+/sdk-php.md
+/sdk-engineering-guide.md
+/sdk-roadmap.md
+/PLAN.md
+/implementation-plan-*.md
+
 # Go
 bin/
 *.test
