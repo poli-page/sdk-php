@@ -1,0 +1,92 @@
+---
+title: Output handling
+description: Receive PDF bytes in memory, as a stream, written to disk, or stored server-side.
+---
+
+The SDK gives you four ways to handle a rendered PDF: in-memory bytes, a PSR-7 stream, a write-to-disk helper, or a stored document on the server. Pick the one that matches how your code consumes the output.
+
+## In-memory (`render->pdf`)
+
+```php
+use PoliPage\ProjectModeInput;
+
+$pdf = $client->render->pdf(new ProjectModeInput(
+    project: 'billing',
+    template: 'invoice',
+    data: ['invoiceNumber' => 'INV-001'],
+));
+// $pdf: binary string — write, upload, or return as-is.
+```
+
+Best for documents that fit comfortably in process memory.
+
+## Streaming (`render->pdfStream`)
+
+For large PDFs or piping straight to an HTTP response or object store, use `pdfStream()` and let the SDK keep memory bounded. The return value is a PSR-7 `StreamInterface`.
+
+```php
+$stream = $client->render->pdfStream(new ProjectModeInput(
+    project: 'billing',
+    template: 'invoice',
+    data: ['invoiceNumber' => 'INV-001'],
+));
+// $stream: Psr\Http\Message\StreamInterface — read in chunks, pipe to a response.
+```
+
+## Write to file (`renderToFile`)
+
+The `renderToFile()` free function (autoloaded from `src/render_to_file.php`) streams bytes directly to disk with bounded memory. Parent directories are created automatically.
+
+```php
+use function PoliPage\renderToFile;
+
+renderToFile(
+    $client,
+    new ProjectModeInput(project: 'billing', template: 'invoice', data: []),
+    './out.pdf',
+);
+```
+
+## Server-side storage (`render->document`)
+
+When you want the PDF to live on Poli Page's servers (for later download, preview, or thumbnails), use `render->document()`. It returns a `DocumentDescriptor` with `documentId`, `presignedPdfUrl`, and a `downloadPdf()` method.
+
+```php
+$doc = $client->render->document(new ProjectModeInput(
+    project: 'billing',
+    template: 'invoice',
+    data: ['invoiceNumber' => 'INV-001'],
+));
+$pdf = $doc->downloadPdf();
+```
+
+`presignedPdfUrl` has a 15-minute TTL. If it expires, call `$client->documents->get($documentId)` to refresh.
+
+## Example
+
+```php
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+use PoliPage\PoliPage;
+use PoliPage\ProjectModeInput;
+
+use function PoliPage\renderToFile;
+
+$client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
+
+renderToFile(
+    $client,
+    new ProjectModeInput(
+        project: 'billing',
+        template: 'invoice',
+        data: ['invoiceNumber' => 'INV-001'],
+    ),
+    './invoices/INV-001.pdf',
+);
+```
+
+## See also
+- [Cancellation](../../production/cancellation/)
+- [Retries and idempotency](../../production/retries-and-idempotency/)

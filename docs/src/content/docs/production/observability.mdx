@@ -1,0 +1,74 @@
+---
+title: Observability
+description: PSR-3 logging and retry/error hooks for instrumenting the PHP SDK.
+---
+
+The SDK exposes two complementary observability surfaces: a PSR-3 `LoggerInterface` and two callable hooks on the constructor. Together they give you the raw signal needed to instrument the SDK with whatever logger or tracing library you use, without baking a dependency into the SDK itself.
+
+## PSR-3 logger
+
+Pass any PSR-3 logger via the constructor. The SDK emits structured log events for every request, response, retry, and terminal failure.
+
+```php
+use Monolog\Logger;
+use Monolog\Handler\StreamHandler;
+use PoliPage\PoliPage;
+
+$logger = new Logger('poli-page');
+$logger->pushHandler(new StreamHandler('php://stderr'));
+
+$client = new PoliPage(
+    apiKey: $_ENV['POLI_PAGE_API_KEY'],
+    logger: $logger,
+);
+```
+
+The SDK never logs the API key.
+
+## The hooks
+
+- `onRetry(RetryEvent $event)` — fires when the SDK decides to retry. `$event->reason` is the `PoliPageException`; `$event->delayMs`, `$event->attempt`.
+- `onError(PoliPageException $error)` — fires when a request fails terminally (after retries are exhausted).
+
+Both hooks are fire-and-forget. The SDK wraps every call in a swallowing `try/catch` so a misbehaving hook never breaks the request, and they cannot mutate request behavior.
+
+## Tracing
+
+For OpenTelemetry, start a span at the call site (the SDK does not control the parent span). Use the PSR-3 logger to attach the SDK's `request_id` to your span attributes.
+
+## Example
+
+```php
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+use PoliPage\PoliPage;
+use PoliPage\ProjectModeInput;
+
+$client = new PoliPage(
+    apiKey: $_ENV['POLI_PAGE_API_KEY'],
+    onRetry: fn ($event) => error_log(sprintf(
+        '↻ retry #%d in %.0fms (%s)',
+        $event->attempt,
+        $event->delayMs,
+        $event->reason->errorCode,
+    )),
+    onError: fn ($error) => error_log(sprintf(
+        '✗ %s %s: %s',
+        $error->errorCode,
+        $error->requestId ?? '',
+        $error->getMessage(),
+    )),
+);
+
+$client->render->pdf(new ProjectModeInput(
+    project: 'billing',
+    template: 'invoice',
+    data: ['invoiceNumber' => 'INV-001'],
+));
+```
+
+## See also
+- [Configuration](../../concepts/configuration/)
+- [Errors](../errors/)

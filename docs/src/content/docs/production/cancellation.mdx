@@ -1,0 +1,73 @@
+---
+title: Cancellation
+description: How the PHP SDK handles request deadlines and where cancellation fits in.
+---
+
+PHP has no language-level cancellation primitive equivalent to Node's `AbortSignal` or Go's `context.Context`. The SDK gives you two related controls instead: per-request **timeouts** and the underlying HTTP client's own cancellation surface (if any).
+
+## Per-request timeouts
+
+Every render and document method accepts a per-call timeout in seconds. The timeout flows through to the PSR-18 client, then through the SDK's retry loop:
+
+```php
+use PoliPage\ProjectModeInput;
+
+$pdf = $client->render->pdf(new ProjectModeInput(
+    project: 'billing',
+    template: 'invoice',
+    data: ['invoiceNumber' => 'INV-001'],
+    timeout: 5.0,
+));
+```
+
+When the deadline trips, the SDK raises a `PoliPage\Exception\TimeoutException` (which extends `ConnectionException`). Timeouts are retried up to `maxRetries` times.
+
+## HTTP-client cancellation
+
+If you inject a Guzzle client and orchestrate your own promise-based pipeline, Guzzle's `request_options` give you the underlying control:
+
+```php
+use GuzzleHttp\Client as GuzzleClient;
+
+$http = new GuzzleClient([
+    'timeout' => 5.0,
+    'connect_timeout' => 2.0,
+]);
+
+$client = new PoliPage(
+    apiKey: $_ENV['POLI_PAGE_API_KEY'],
+    httpClient: $http,
+);
+```
+
+The SDK does not expose a public hook to abort an in-flight call from another thread or signal handler. If you need that, do it at the HTTP layer.
+
+## Example
+
+```php
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+use PoliPage\Exception\TimeoutException;
+use PoliPage\PoliPage;
+use PoliPage\ProjectModeInput;
+
+$client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
+
+try {
+    $pdf = $client->render->pdf(new ProjectModeInput(
+        project: 'billing',
+        template: 'invoice',
+        data: ['invoiceNumber' => 'INV-001'],
+        timeout: 10.0,
+    ));
+} catch (TimeoutException $e) {
+    error_log('render timed out: ' . $e->getMessage());
+    throw $e;
+}
+```
+
+## See also
+- [Configuration](../../concepts/configuration/)
+- [Errors](../errors/)

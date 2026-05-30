@@ -1,0 +1,43 @@
+---
+title: Configuration
+description: Per-client options for timeouts, retries, HTTP client injection, and observability hooks.
+---
+
+The `PoliPage` constructor accepts named arguments. Every parameter is optional except `apiKey`. Defaults match the canonical SDK behavior shared by every Poli Page SDK.
+
+## Available options
+
+- `apiKey` (required) — your `pp_test_` or `pp_live_` key.
+- `baseUrl` — override the API endpoint. Defaults to `https://api.poli.page`.
+- `timeout` — per-request timeout in seconds. Defaults to `60.0`.
+- `maxRetries` — maximum retry attempts for retryable errors. Defaults to `2` (three total attempts).
+- `retryDelay` — initial retry backoff in seconds. Defaults to `0.5`. Doubles each attempt.
+- `httpClient` — a PSR-18 `ClientInterface`. If omitted, the SDK uses `Psr18ClientDiscovery::find()`.
+- `requestFactory` / `streamFactory` — PSR-17 factories. Auto-discovered when omitted.
+- `logger` — any PSR-3 `LoggerInterface`. Defaults to a `NullLogger`.
+- `onRetry` / `onError` — observability hooks. Never block, never mutate requests.
+
+## Example
+
+```php
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+use PoliPage\PoliPage;
+use Psr\Log\LoggerInterface;
+
+$client = new PoliPage(
+    apiKey: $_ENV['POLI_PAGE_API_KEY'],
+    timeout: 30.0,
+    maxRetries: 3,
+    retryDelay: 0.25,
+    onRetry: fn ($event) => error_log(sprintf('retry #%d in %.0fms', $event->attempt, $event->delayMs)),
+    onError: fn ($error) => error_log(sprintf('terminal: %s', $error->errorCode)),
+);
+```
+
+## See also
+- [Authentication](../authentication/)
+- [PSR-18 setup](../psr-18/)
+- [Observability](../../production/observability/)

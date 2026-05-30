@@ -1,0 +1,65 @@
+---
+title: Quick start
+description: Render your first PDF with the Poli Page PHP SDK in under 30 seconds.
+---
+
+import ApiKeyCallout from '@preset/components/ApiKeyCallout.astro';
+
+This page walks through your first render — from key to PDF — without touching the dashboard.
+
+<ApiKeyCallout />
+
+## Set your API key
+
+Export your key into the environment your script runs in:
+
+```bash
+export POLI_PAGE_API_KEY=pp_test_...
+```
+
+## Render a PDF
+
+```php
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+use PoliPage\PoliPage;
+use PoliPage\ProjectModeInput;
+
+$client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
+
+$pdf = $client->render->pdf(new ProjectModeInput(
+    project: 'billing',
+    template: 'invoice',
+    data: ['invoiceNumber' => 'INV-001', 'total' => 1280],
+));
+```
+
+`$pdf` is a binary string. Write it to disk, stream it to S3, or send it back through an HTTP response.
+
+## Example
+
+```php
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+use PoliPage\PoliPage;
+use PoliPage\ProjectModeInput;
+
+$client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
+
+$pdf = $client->render->pdf(new ProjectModeInput(
+    project: 'billing',
+    template: 'invoice',
+    data: ['invoiceNumber' => 'INV-001', 'total' => 1280],
+));
+
+file_put_contents('./invoice.pdf', $pdf);
+```
+
+## See also
+- [Authentication](../../concepts/authentication/)
+- [Render modes](../../concepts/render-modes/)
+- [Output handling](../../concepts/output-handling/)

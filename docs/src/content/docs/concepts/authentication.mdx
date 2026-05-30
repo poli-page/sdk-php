@@ -1,0 +1,50 @@
+---
+title: Authentication
+description: How the Poli Page SDK authenticates with the API using test or live keys.
+---
+
+import ApiKeyCallout from '@preset/components/ApiKeyCallout.astro';
+
+The Poli Page PHP SDK authenticates every request with a bearer token. The key prefix determines which environment the request hits.
+
+## API keys
+
+<ApiKeyCallout />
+
+Pass the key to the client factory:
+
+```php
+$client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
+```
+
+The SDK never reads `$_ENV['POLI_PAGE_API_KEY']` implicitly. You always pass the key in.
+
+## Custom base URL
+
+To target the develop environment (or a self-hosted gateway), use the full constructor and pass `baseUrl`:
+
+```php
+$client = new PoliPage(
+    apiKey: $_ENV['POLI_PAGE_API_KEY'],
+    baseUrl: 'https://api-develop.poli.page',
+);
+```
+
+## Example
+
+```php
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+use PoliPage\PoliPage;
+
+$client = new PoliPage(
+    apiKey: $_ENV['POLI_PAGE_API_KEY'],
+    baseUrl: $_ENV['POLI_PAGE_BASE_URL'] ?? 'https://api.poli.page',
+);
+```
+
+## See also
+- [Configuration](../configuration/)
+- [Errors](../../production/errors/)

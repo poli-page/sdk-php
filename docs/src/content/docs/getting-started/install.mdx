@@ -1,0 +1,42 @@
+---
+title: Install
+description: How to install the Poli Page PHP SDK with Composer.
+---
+
+The Poli Page PHP SDK ships as `poli-page/sdk` on Packagist. It targets PHP 8.3 or later and integrates with any PSR-18 HTTP client (Guzzle, Symfony HTTP Client, etc.).
+
+## Install with Composer
+
+```bash
+composer require poli-page/sdk
+```
+
+You also need a PSR-18 client and a PSR-17 message factory. The SDK ships with `php-http/discovery`, so any of these will be picked up automatically:
+
+```bash
+composer require guzzlehttp/guzzle
+# or
+composer require symfony/http-client nyholm/psr7
+```
+
+See [PSR-18 setup](../../concepts/psr-18/) for the full integration story.
+
+## PHP version
+
+The SDK targets PHP 8.3 and is tested against 8.3 and 8.4 on Linux, macOS, and Windows. See [runtime support](../../reference/runtime-support/) for the full matrix.
+
+## Example
+
+```php
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+use PoliPage\PoliPage;
+
+$client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
+```
+
+## See also
+- [Quick start](../quick-start/)
+- [Configuration](../../concepts/configuration/)

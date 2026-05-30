@@ -1,0 +1,100 @@
+---
+title: PSR-18 setup
+description: How the PHP SDK discovers a PSR-18 HTTP client and how to wire one explicitly.
+---
+
+The PHP SDK does not bundle an HTTP client. It depends on the PSR-18 client and PSR-17 factory contracts, and uses `php-http/discovery` to auto-detect a working implementation from whatever you have installed.
+
+## Auto-discovery (recommended)
+
+Install any PSR-18 client and the SDK picks it up:
+
+```bash
+composer require guzzlehttp/guzzle
+# or
+composer require symfony/http-client nyholm/psr7
+```
+
+Then construct the client without any HTTP arguments:
+
+```php
+use PoliPage\PoliPage;
+
+$client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
+```
+
+Behind the scenes, `Psr18ClientDiscovery::find()` and `Psr17FactoryDiscovery::findRequestFactory()` locate a registered implementation. If none is found, the SDK throws a `PoliPageException` with code `invalid_options` and a message pointing at the missing dependency.
+
+## Explicit wiring
+
+In long-lived applications you usually share a single HTTP client across the process (for connection pooling, custom middleware, mock-based testing). Pass it in directly:
+
+```php
+use GuzzleHttp\Client as GuzzleClient;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use PoliPage\PoliPage;
+
+$factory = new Psr17Factory();
+
+$client = new PoliPage(
+    apiKey: $_ENV['POLI_PAGE_API_KEY'],
+    httpClient: new GuzzleClient(['timeout' => 60.0]),
+    requestFactory: $factory,
+    streamFactory: $factory,
+);
+```
+
+Once you inject an HTTP client, the SDK never falls back to discovery — every request flows through the instance you passed.
+
+## Testing with a mock client
+
+For unit tests, pair `php-http/mock-client` with `nyholm/psr7`:
+
+```php
+use Http\Mock\Client as MockClient;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Nyholm\Psr7\Response;
+
+$mock = new MockClient();
+$mock->addResponse(new Response(200, [], '{"documentId":"doc_123"}'));
+
+$factory = new Psr17Factory();
+$client = new PoliPage(
+    apiKey: 'pp_test_demo',
+    httpClient: $mock,
+    requestFactory: $factory,
+    streamFactory: $factory,
+);
+```
+
+## Example
+
+```php
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+use GuzzleHttp\Client as GuzzleClient;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use PoliPage\PoliPage;
+use PoliPage\ProjectModeInput;
+
+$factory = new Psr17Factory();
+
+$client = new PoliPage(
+    apiKey: $_ENV['POLI_PAGE_API_KEY'],
+    httpClient: new GuzzleClient(['timeout' => 60.0, 'http_errors' => false]),
+    requestFactory: $factory,
+    streamFactory: $factory,
+);
+
+$pdf = $client->render->pdf(new ProjectModeInput(
+    project: 'billing',
+    template: 'invoice',
+    data: ['invoiceNumber' => 'INV-001', 'total' => 1280],
+));
+```
+
+## See also
+- [Configuration](../configuration/)
+- [Install](../../getting-started/install/)

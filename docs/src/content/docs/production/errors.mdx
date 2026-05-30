@@ -1,0 +1,87 @@
+---
+title: Errors
+description: How the Poli Page PHP SDK surfaces failures and how to handle each error code.
+---
+
+import ErrorTable from '@preset/components/ErrorTable.astro';
+
+Every failure thrown by the SDK is a `PoliPage\PoliPageException` (which extends `RuntimeException`). The `errorCode` property tells you what went wrong; the `requestId` property is what to quote when filing a support ticket. Specialized subclasses under `PoliPage\Exception\*` let you `catch` by HTTP status family.
+
+## The exception class
+
+```php
+use PoliPage\PoliPageException;
+use PoliPage\ProjectModeInput;
+
+try {
+    $client->render->pdf(new ProjectModeInput(
+        project: 'billing',
+        template: 'invoice',
+        data: ['invoiceNumber' => 'INV-001'],
+    ));
+} catch (PoliPageException $e) {
+    error_log(sprintf('%s %s — %s', $e->errorCode, $e->requestId ?? '', $e->getMessage()));
+    throw $e;
+}
+```
+
+## SDK-internal codes
+
+These originate inside the SDK before any HTTP call (or in response to a network-layer failure). They are lowercase.
+
+<ErrorTable errors={[
+  { code: 'invalid_options', when: 'Constructor arguments are missing or malformed (empty apiKey, undiscoverable PSR-18 client).', recovery: 'Fix the call site. Thrown synchronously.' },
+  { code: 'network_error', when: 'TCP/TLS-layer failure reaching the API. Surfaced via Exception\\ConnectionException.', recovery: 'Automatically retried up to maxRetries times.' },
+  { code: 'timeout', when: 'The request did not complete within the configured `timeout`. Surfaced via Exception\\TimeoutException.', recovery: 'Automatically retried up to maxRetries times. Raise `timeout` if it keeps tripping.' },
+  { code: 'aborted', when: 'A future cancellation primitive aborted the request.', recovery: 'Not retryable. Surface to the caller.' },
+]} />
+
+## API codes
+
+Returned by the Poli Page API. Uppercase, snake-case. The SDK forwards the code verbatim and raises the matching `PoliPage\Exception\*` subclass.
+
+<ErrorTable errors={[
+  { code: 'INVALID_API_KEY', when: 'The API key is malformed or revoked.', recovery: 'Rotate the key in the dashboard.' },
+  { code: 'MISSING_API_KEY', when: 'No API key was provided in the request.', recovery: 'Check the constructor was called with `apiKey`.' },
+  { code: 'NOT_FOUND', when: 'The `project/template` slug or `documentId` does not exist.', recovery: 'Verify the slug/id; check the template is published in this environment.' },
+  { code: 'VALIDATION_ERROR', when: 'The `data` array does not satisfy the template schema.', recovery: 'Inspect the template schema in the dashboard.' },
+  { code: 'MISSING_DATA', when: 'The request body lacks a required `data` field.', recovery: 'Pass `data: []` (or with values) on every render call.' },
+  { code: 'QUOTA_EXCEEDED', when: 'You exceeded the per-key rate limit or monthly quota.', recovery: 'Automatically retried; bump tier for sustained higher throughput.' },
+  { code: 'PAYMENT_REQUIRED', when: 'The organization`s billing is past due.', recovery: 'Update the payment method in the dashboard.' },
+  { code: 'INTERNAL_ERROR', when: 'The API returned 5xx.', recovery: 'Automatically retried; contact support if it persists.' },
+]} />
+
+The full list of API codes lives in [the reference](../../reference/errors/).
+
+## Example
+
+```php
+<?php
+
+require __DIR__ . '/vendor/autoload.php';
+
+use PoliPage\Exception\RateLimitException;
+use PoliPage\PoliPage;
+use PoliPage\PoliPageException;
+use PoliPage\ProjectModeInput;
+
+$client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
+
+try {
+    $pdf = $client->render->pdf(new ProjectModeInput(
+        project: 'billing',
+        template: 'invoice',
+        data: ['invoiceNumber' => 'INV-001'],
+    ));
+} catch (RateLimitException $e) {
+    // Custom strategy on top of the SDK's built-in retries.
+    sleep(30);
+    throw $e;
+} catch (PoliPageException $e) {
+    throw $e;
+}
+```
+
+## See also
+- [Retries and idempotency](../retries-and-idempotency/)
+- [Observability](../observability/)

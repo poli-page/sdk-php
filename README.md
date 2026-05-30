@@ -7,7 +7,7 @@
 
 Official PHP SDK for [Poli Page](https://poli.page) — render polished PDFs from HTML templates via the Poli Page API.
 
-→ API reference (auto-generated from source): **https://docs.poli.page/reference/sdk/php/**
+→ Docs (auto-generated from source): **https://poli-page.github.io/sdk-php/**
 
 ## Install
 
@@ -305,7 +305,7 @@ try {
 }
 ```
 
-→ Full error reference: https://docs.poli.page/reference/sdk/php/
+→ Full error reference: https://poli-page.github.io/sdk-php/reference/errors/
 
 ## Cancellation
 
@@ -385,7 +385,7 @@ The SDK is sync-only. PHP request lifecycles are typically short-lived; concurre
 ## Documentation & support
 
 - Platform docs: [docs.poli.page](https://docs.poli.page)
-- SDK API reference: [docs.poli.page/reference/sdk/php](https://docs.poli.page/reference/sdk/php/)
+- SDK docs site: [poli-page.github.io/sdk-php](https://poli-page.github.io/sdk-php/)
 - Sign up & generate API keys: [app.poli.page](https://app.poli.page)
 - Issues: [github.com/poli-page/sdk-php/issues](https://github.com/poli-page/sdk-php/issues)
 
