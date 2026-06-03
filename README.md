@@ -366,6 +366,10 @@ The SDK is fully type-annotated and tested at **PHPStan level max** with `phpsta
 
 `final readonly class` is used throughout for input/output DTOs. Mutations require constructing a new instance — pair with PHP 8.4's `clone with` syntax if you need a one-field tweak.
 
+## Concurrency & thread-safety
+
+PHP's per-request execution model means client instances are scoped to a single request — there is no shared mutable state to coordinate across requests. For long-running workers (ReactPHP, Swoole, RoadRunner, FrankenPHP), construct one client per worker rather than sharing across requests, since the underlying PSR-18 client may not be reentrant.
+
 ## Runtime support
 
 | Runtime | Status |
