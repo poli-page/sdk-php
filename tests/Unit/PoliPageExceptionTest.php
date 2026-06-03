@@ -150,4 +150,27 @@ final class PoliPageExceptionTest extends TestCase
             self::assertInstanceOf(PoliPageException::class, $exception);
         }
     }
+
+    public function testToPayloadUsesApiStatusForStatusBearingExceptions(): void
+    {
+        $err = new AuthenticationException('Forbidden', 'authentication_failed', 401, 'req_abc');
+        self::assertSame(
+            ['code' => 'authentication_failed', 'message' => 'Forbidden', 'status' => 401, 'requestId' => 'req_abc'],
+            $err->toPayload(),
+        );
+    }
+
+    public function testToPayloadUses503ForConnectionException(): void
+    {
+        $err = new ConnectionException('dns failure', PoliPageException::NETWORK_ERROR);
+        self::assertSame(503, $err->toPayload()['status']);
+        self::assertNull($err->status, 'status attribute stays null for transport errors');
+    }
+
+    public function testToPayloadUses504ForTimeoutException(): void
+    {
+        $err = new \PoliPage\Exception\TimeoutException('slow', PoliPageException::TIMEOUT);
+        self::assertSame(504, $err->toPayload()['status']);
+        self::assertNull($err->status);
+    }
 }

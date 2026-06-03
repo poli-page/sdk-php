@@ -124,4 +124,31 @@ class PoliPageException extends \RuntimeException
     {
         return $this instanceof ApiStatusException;
     }
+
+    /**
+     * Canonical wire payload for framework integrations:
+     * `{code, message, status, requestId}`. `status` surfaces 503 for
+     * `ConnectionException`, 504 for `TimeoutException`, and the API
+     * status otherwise. The {@see $status} property itself stays `null`
+     * for transport errors — only the payload surfaces 503/504.
+     *
+     * @return array{code: string, message: string, status: ?int, requestId: ?string}
+     */
+    public function toPayload(): array
+    {
+        return [
+            'code' => $this->errorCode,
+            'message' => $this->getMessage(),
+            'status' => $this->payloadStatus(),
+            'requestId' => $this->requestId,
+        ];
+    }
+
+    /**
+     * Hook overridden by ConnectionException → 503 and TimeoutException → 504.
+     */
+    protected function payloadStatus(): ?int
+    {
+        return $this->status;
+    }
 }

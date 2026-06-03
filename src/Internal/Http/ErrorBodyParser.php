@@ -29,9 +29,11 @@ final class ErrorBodyParser
             return self::internalErrorFallback($status);
         }
 
-        $code = self::firstStringField($json, ['code', 'message', 'error']) ?? 'unknown_error';
-        $messageRaw = $json['message'] ?? null;
-        $message = is_string($messageRaw) ? $messageRaw : "API error ($status): $code";
+        // RFC 7807: prefer `detail` (specific reason) > `title` (generic name)
+        // > legacy `message` field > canned "HTTP <status>". Code is verbatim
+        // from the API — never inferred from message.
+        $code = self::firstStringField($json, ['code', 'error']) ?? 'unknown_error';
+        $message = self::firstStringField($json, ['detail', 'title', 'message']) ?? "HTTP $status";
 
         return ['code' => $code, 'message' => $message];
     }
@@ -58,7 +60,7 @@ final class ErrorBodyParser
     {
         return [
             'code' => 'INTERNAL_ERROR',
-            'message' => "API error $status: response body was not valid JSON",
+            'message' => "HTTP $status: response body was not valid JSON",
         ];
     }
 }

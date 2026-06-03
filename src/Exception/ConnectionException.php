@@ -13,4 +13,8 @@ use PoliPage\PoliPageException;
  */
 class ConnectionException extends PoliPageException
 {
+    protected function payloadStatus(): ?int
+    {
+        return 503;
+    }
 }

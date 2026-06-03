@@ -12,4 +12,8 @@ namespace PoliPage\Exception;
  */
 final class TimeoutException extends ConnectionException
 {
+    protected function payloadStatus(): ?int
+    {
+        return 504;
+    }
 }
