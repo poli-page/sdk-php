@@ -17,7 +17,7 @@ final readonly class InlineModeInput extends RenderInput
     public function __construct(
         public string $template,
         public array $data,
-        public ?string $format = null,
+        public ?PageFormat $format = null,
         public ?string $orientation = null,
         public ?string $locale = null,
         public ?RenderMetadata $metadata = null,
@@ -37,7 +37,7 @@ final readonly class InlineModeInput extends RenderInput
             'data' => $this->data,
         ];
         if ($this->format !== null) {
-            $wire['format'] = $this->format;
+            $wire['format'] = $this->format->value;
         }
         if ($this->orientation !== null) {
             $wire['orientation'] = $this->orientation;
