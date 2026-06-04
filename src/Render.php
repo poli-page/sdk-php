@@ -66,6 +66,13 @@ final class Render
      */
     public function document(ProjectModeInput $input): DocumentDescriptor
     {
+        if (empty($input->project)) {
+            throw new PoliPageException(
+                'project is required for render.document / render.pdf / render.pdfStream',
+                PoliPageException::PROJECT_REQUIRED_FOR_DOCUMENT,
+            );
+        }
+
         $raw = $this->transport->post(
             Constants::PATH_RENDER,
             $input->toWire(),
