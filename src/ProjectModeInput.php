@@ -21,7 +21,7 @@ final readonly class ProjectModeInput extends RenderInput
         public string $template,
         public array $data,
         public ?string $version = null,
-        public ?string $format = null,
+        public ?PageFormat $format = null,
         public ?string $orientation = null,
         public ?string $locale = null,
         public ?RenderMetadata $metadata = null,
@@ -45,7 +45,7 @@ final readonly class ProjectModeInput extends RenderInput
             $wire['version'] = $this->version;
         }
         if ($this->format !== null) {
-            $wire['format'] = $this->format;
+            $wire['format'] = $this->format->value;
         }
         if ($this->orientation !== null) {
             $wire['orientation'] = $this->orientation;
