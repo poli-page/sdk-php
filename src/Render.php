@@ -66,7 +66,7 @@ final class Render
      */
     public function document(ProjectModeInput $input): DocumentDescriptor
     {
-        if (empty($input->project)) {
+        if ($input->project === '') {
             throw new PoliPageException(
                 'project is required for render.document / render.pdf / render.pdfStream',
                 PoliPageException::PROJECT_REQUIRED_FOR_DOCUMENT,
