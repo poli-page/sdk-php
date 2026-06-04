@@ -6,6 +6,8 @@ namespace PoliPage;
 
 use Http\Discovery\Psr17FactoryDiscovery;
 use Http\Discovery\Psr18ClientDiscovery;
+use PoliPage\Events\RequestEvent;
+use PoliPage\Events\ResponseEvent;
 use PoliPage\Events\RetryEvent;
 use PoliPage\Internal\Constants;
 use PoliPage\Internal\ExceptionClassifier;
@@ -64,6 +66,10 @@ final class PoliPage implements Transport
     private readonly ?\Closure $onRetry;
     /** @var (\Closure(PoliPageException): void)|null */
     private readonly ?\Closure $onError;
+    /** @var (\Closure(RequestEvent): void)|null */
+    private readonly ?\Closure $onRequest;
+    /** @var (\Closure(ResponseEvent): void)|null */
+    private readonly ?\Closure $onResponse;
     private readonly string $userAgent;
     /** @var (\Closure(): float)|null */
     private readonly ?\Closure $jitterSource;
@@ -71,6 +77,8 @@ final class PoliPage implements Transport
     /**
      * @param (\Closure(RetryEvent): void)|null     $onRetry      fires before each retry sleep
      * @param (\Closure(PoliPageException): void)|null $onError   fires once at terminal failure
+     * @param (\Closure(RequestEvent): void)|null   $onRequest    fires just before each HTTP attempt
+     * @param (\Closure(ResponseEvent): void)|null  $onResponse   fires after each successful 2xx response
      * @param (\Closure(): float)|null              $jitterSource test hook; default uses mt_rand
      */
     public function __construct(
@@ -85,6 +93,8 @@ final class PoliPage implements Transport
         ?LoggerInterface $logger = null,
         ?\Closure $onRetry = null,
         ?\Closure $onError = null,
+        ?\Closure $onRequest = null,
+        ?\Closure $onResponse = null,
         ?\Closure $jitterSource = null,
     ) {
         if ($apiKey === '') {
@@ -101,6 +111,8 @@ final class PoliPage implements Transport
         $this->logger = $logger ?? new NullLogger();
         $this->onRetry = $onRetry;
         $this->onError = $onError;
+        $this->onRequest = $onRequest;
+        $this->onResponse = $onResponse;
         $this->userAgent = Constants::USER_AGENT_PREFIX . Version::VERSION;
         $this->jitterSource = $jitterSource;
         $this->render = new Render($this);
@@ -341,6 +353,11 @@ final class PoliPage implements Transport
             'attempt' => $attemptNumber,
             'timeout_s' => $timeout,
         ]);
+        $this->fireOnRequest(new RequestEvent(
+            method: $method,
+            url: $url,
+            attempt: $attemptNumber,
+        ));
         $startedAt = microtime(true);
 
         try {
@@ -369,6 +386,11 @@ final class PoliPage implements Transport
                 'request_id' => $requestId,
                 'duration_ms' => $durationMs,
             ]);
+            $this->fireOnResponse(new ResponseEvent(
+                status: $status,
+                requestId: $requestId,
+                durationMs: (int) round($durationMs),
+            ));
 
             return new SendOnceResult($response, null, null, false);
         }
@@ -405,6 +427,30 @@ final class PoliPage implements Transport
         }
         try {
             ($this->onError)($error);
+        } catch (\Throwable) {
+            // Hooks must never break the request — match Node's #fireHook.
+        }
+    }
+
+    private function fireOnRequest(RequestEvent $event): void
+    {
+        if ($this->onRequest === null) {
+            return;
+        }
+        try {
+            ($this->onRequest)($event);
+        } catch (\Throwable) {
+            // Hooks must never break the request — match Node's #fireHook.
+        }
+    }
+
+    private function fireOnResponse(ResponseEvent $event): void
+    {
+        if ($this->onResponse === null) {
+            return;
+        }
+        try {
+            ($this->onResponse)($event);
         } catch (\Throwable) {
             // Hooks must never break the request — match Node's #fireHook.
         }
