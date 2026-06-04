@@ -18,7 +18,7 @@ final readonly class InlineModeInput extends RenderInput
         public string $template,
         public array $data,
         public ?PageFormat $format = null,
-        public ?string $orientation = null,
+        public ?Orientation $orientation = null,
         public ?string $locale = null,
         public ?RenderMetadata $metadata = null,
         ?string $idempotencyKey = null,
@@ -40,7 +40,7 @@ final readonly class InlineModeInput extends RenderInput
             $wire['format'] = $this->format->value;
         }
         if ($this->orientation !== null) {
-            $wire['orientation'] = $this->orientation;
+            $wire['orientation'] = $this->orientation->value;
         }
         if ($this->locale !== null) {
             $wire['locale'] = $this->locale;

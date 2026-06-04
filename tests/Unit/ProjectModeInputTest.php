@@ -6,6 +6,7 @@ namespace PoliPage\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use PoliPage\Orientation;
 use PoliPage\PageFormat;
 use PoliPage\ProjectModeInput;
 
@@ -83,5 +84,42 @@ final class ProjectModeInputTest extends TestCase
 
         $json = json_encode($input->toWire(), flags: JSON_THROW_ON_ERROR);
         self::assertStringNotContainsString('"format"', $json);
+    }
+
+    public function testOrientationRoundTripsWhenProvided(): void
+    {
+        $input = new ProjectModeInput(
+            project: 'billing',
+            template: 'invoice',
+            data: [],
+            orientation: Orientation::Landscape,
+        );
+
+        self::assertSame(Orientation::Landscape, $input->orientation);
+    }
+
+    public function testToWireIncludesOrientationAsWireString(): void
+    {
+        $input = new ProjectModeInput(
+            project: 'billing',
+            template: 'invoice',
+            data: [],
+            orientation: Orientation::Landscape,
+        );
+
+        $wire = $input->toWire();
+        self::assertArrayHasKey('orientation', $wire);
+        self::assertSame('landscape', $wire['orientation']);
+    }
+
+    public function testToWireOmitsOrientationKeyWhenNull(): void
+    {
+        $input = new ProjectModeInput(
+            project: 'billing',
+            template: 'invoice',
+            data: [],
+        );
+
+        self::assertArrayNotHasKey('orientation', $input->toWire());
     }
 }

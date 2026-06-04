@@ -7,6 +7,7 @@ namespace PoliPage\Tests\Unit;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use PoliPage\InlineModeInput;
+use PoliPage\Orientation;
 use PoliPage\PageFormat;
 
 #[CoversClass(InlineModeInput::class)]
@@ -31,5 +32,39 @@ final class InlineModeInputTest extends TestCase
         );
 
         self::assertNull($input->format);
+    }
+
+    public function testOrientationRoundTripsWhenProvided(): void
+    {
+        $input = new InlineModeInput(
+            template: '<h1>Hello</h1>',
+            data: [],
+            orientation: Orientation::Landscape,
+        );
+
+        self::assertSame(Orientation::Landscape, $input->orientation);
+    }
+
+    public function testToWireIncludesOrientationAsWireString(): void
+    {
+        $input = new InlineModeInput(
+            template: '<h1>Hello</h1>',
+            data: [],
+            orientation: Orientation::Landscape,
+        );
+
+        $wire = $input->toWire();
+        self::assertArrayHasKey('orientation', $wire);
+        self::assertSame('landscape', $wire['orientation']);
+    }
+
+    public function testToWireOmitsOrientationKeyWhenNull(): void
+    {
+        $input = new InlineModeInput(
+            template: '<h1>Hello</h1>',
+            data: [],
+        );
+
+        self::assertArrayNotHasKey('orientation', $input->toWire());
     }
 }
