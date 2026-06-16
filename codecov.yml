@@ -1,0 +1,37 @@
+# Codecov configuration. Schema:
+#   https://docs.codecov.com/docs/codecovyml-reference
+#
+# Why this file exists at all (vs. relying on defaults):
+#  - Pin a deliberate coverage policy so a regression shows up as a red
+#    status check instead of a silent drift.
+#  - Exclude paths that are not part of the shipped library, so the headline
+#    percentage reflects `src/` and only `src/`.
+#  - Tame the PR comment so it only appears when coverage actually moved.
+
+coverage:
+  status:
+    # `project` = coverage of the whole codebase on this commit vs. the base.
+    # `auto` target locks against the base commit's percentage; the 1%
+    # threshold leaves room for non-coverage-affecting refactors without
+    # flapping the check.
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    # `patch` = coverage of only the lines this PR changed. A flat 80% on
+    # patch is the actual TDD guardrail — new code must arrive with tests.
+    patch:
+      default:
+        target: 80%
+
+ignore:
+  - "tests"
+  - "examples"
+  - "scripts"
+  - "docs"
+
+comment:
+  layout: "reach, diff, files"
+  # Skip the PR comment when coverage is unchanged — keeps no-op refactor
+  # PRs free of Codecov noise.
+  require_changes: true

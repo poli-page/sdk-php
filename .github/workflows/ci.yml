@@ -13,6 +13,12 @@ jobs:
   test:
     name: PHP ${{ matrix.php-version }} (${{ matrix.deps }}) on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # `id-token: write` is needed by the Codecov upload step (OIDC auth).
+    # `contents: read` re-stated because declaring permissions at the job
+    # level replaces — does not merge with — the workflow-level block.
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -157,12 +163,19 @@ jobs:
       # Upload only on the single matrix entry that produced coverage.xml.
       # `fail_ci_if_error: false` keeps a Codecov outage from breaking CI —
       # coverage is informational; the suite has already passed by here.
+      # `use_oidc: true` authenticates via the GitHub-issued OIDC token
+      # instead of a long-lived upload token. Public-repo tokenless uploads
+      # are rejected on the default branch ("Token required because branch
+      # is protected"), and OIDC avoids both the secret-rotation overhead
+      # and that rejection.
       - name: Upload coverage to Codecov
         if: matrix.coverage != ''
         uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: coverage.xml
           fail_ci_if_error: false
+          use_oidc: true
+          slug: poli-page/sdk-php
 
       # Install-smoke: prove the package is installable via Composer from a
       # clean directory and that the documented one-liner reaches a working
