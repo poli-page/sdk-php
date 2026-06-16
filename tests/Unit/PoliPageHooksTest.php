@@ -20,13 +20,13 @@ final class PoliPageHooksTest extends TestCase
     // onRequest
     // -----------------------------------------------------------------------
 
-    public function testOnRequestFiresOncePerAttemptWithCorrectFields(): void
+    public function testOnRequestFiresOncePerAttemptWithSequentialCounter(): void
     {
-        $events = [];
+        $attempts = [];
         [$client, $mock, $factory] = $this->makeClientWithMock(
             maxRetries: 2,
-            onRequest: function (RequestEvent $event) use (&$events): void {
-                $events[] = $event;
+            onRequest: function (RequestEvent $event) use (&$attempts): void {
+                $attempts[] = $event->attempt;
             },
         );
         // First attempt fails, second succeeds.
@@ -39,11 +39,7 @@ final class PoliPageHooksTest extends TestCase
 
         $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
 
-        self::assertCount(2, $events, 'onRequest should fire once per attempt');
-        self::assertSame('POST', $events[0]->method);
-        self::assertStringContainsString('/v1/render/preview', $events[0]->url);
-        self::assertSame(1, $events[0]->attempt);
-        self::assertSame(2, $events[1]->attempt);
+        self::assertSame([1, 2], $attempts, 'onRequest fires once per attempt with sequential counter');
     }
 
     public function testOnRequestFiresOnFirstAttemptEvenOnSuccess(): void
@@ -64,6 +60,8 @@ final class PoliPageHooksTest extends TestCase
 
         self::assertCount(1, $events);
         self::assertSame(1, $events[0]->attempt);
+        self::assertSame('POST', $events[0]->method);
+        self::assertStringContainsString('/v1/render/preview', $events[0]->url);
     }
 
     public function testThrowingOnRequestDoesNotBreakRequest(): void

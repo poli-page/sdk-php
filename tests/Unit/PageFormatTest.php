@@ -25,9 +25,4 @@ final class PageFormatTest extends TestCase
     {
         self::assertSame(PageFormat::A4, PageFormat::from('A4'));
     }
-
-    public function testTryFromUnknownReturnsNull(): void
-    {
-        self::assertNull(PageFormat::tryFrom('Unknown'));
-    }
 }

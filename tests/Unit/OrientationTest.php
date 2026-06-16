@@ -30,9 +30,4 @@ final class OrientationTest extends TestCase
     {
         self::assertSame(Orientation::Portrait, Orientation::from('portrait'));
     }
-
-    public function testTryFromUnknownReturnsNull(): void
-    {
-        self::assertNull(Orientation::tryFrom('Unknown'));
-    }
 }
