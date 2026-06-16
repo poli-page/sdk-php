@@ -2,6 +2,7 @@
 
 [![Packagist Version](https://img.shields.io/packagist/v/poli-page/sdk.svg)](https://packagist.org/packages/poli-page/sdk)
 [![CI](https://github.com/poli-page/sdk-php/actions/workflows/ci.yml/badge.svg)](https://github.com/poli-page/sdk-php/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/codecov/c/github/poli-page/sdk-php.svg)](https://codecov.io/gh/poli-page/sdk-php)
 [![PHP Version](https://img.shields.io/packagist/php-v/poli-page/sdk.svg)](https://packagist.org/packages/poli-page/sdk)
 [![Downloads](https://img.shields.io/packagist/dt/poli-page/sdk.svg)](https://packagist.org/packages/poli-page/sdk)
 [![PHPStan](https://img.shields.io/badge/PHPStan-max-brightgreen.svg)](phpstan.neon)

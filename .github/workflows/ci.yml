@@ -31,6 +31,17 @@ jobs:
           - os: windows-latest
             php-version: '8.5'
             deps: stable
+          # Coverage axis merged onto the existing (ubuntu, 8.4, stable)
+          # job — when every axis of an `include` entry matches an existing
+          # matrix cell, the extra key (`coverage`) is added rather than
+          # spawning a new job. PCOV over Xdebug: ~10x faster, no debugger
+          # baggage. PHP 8.4 picked deliberately as the middle supported
+          # version: avoids the 8.3 (lowest) PHPStan oddities and the 8.5
+          # bleeding edge.
+          - os: ubuntu-latest
+            php-version: '8.4'
+            deps: stable
+            coverage: pcov
     steps:
       # SHA-pinned third-party actions per cross-SDK security policy. Refresh
       # via `gh api repos/<owner>/<repo>/git/refs/tags/<tag> --jq .object.sha`
@@ -40,7 +51,7 @@ jobs:
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: ${{ matrix.php-version }}
-          coverage: none
+          coverage: ${{ matrix.coverage || 'none' }}
           tools: composer:v2
 
       - name: Validate composer.json
@@ -132,12 +143,26 @@ jobs:
         shell: bash
         run: |
           if [ -x vendor/bin/phpunit ]; then
-            vendor/bin/phpunit --testsuite=unit
+            if [ -n "${{ matrix.coverage }}" ]; then
+              vendor/bin/phpunit --testsuite=unit --coverage-clover=coverage.xml
+            else
+              vendor/bin/phpunit --testsuite=unit
+            fi
           elif [ -x vendor/bin/pest ]; then
             vendor/bin/pest
           else
             echo "No test runner installed — skipping"
           fi
+
+      # Upload only on the single matrix entry that produced coverage.xml.
+      # `fail_ci_if_error: false` keeps a Codecov outage from breaking CI —
+      # coverage is informational; the suite has already passed by here.
+      - name: Upload coverage to Codecov
+        if: matrix.coverage != ''
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
 
       # Install-smoke: prove the package is installable via Composer from a
       # clean directory and that the documented one-liner reaches a working
