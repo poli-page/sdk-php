@@ -1,14 +1,14 @@
 # Poli Page SDK for PHP
 
-[![Packagist Version](https://img.shields.io/packagist/v/poli-page/sdk.svg)](https://packagist.org/packages/poli-page/sdk)
-[![CI](https://github.com/poli-page/sdk-php/actions/workflows/ci.yml/badge.svg)](https://github.com/poli-page/sdk-php/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/poli-page/sdk-php/actions/workflows/codeql.yml/badge.svg)](https://github.com/poli-page/sdk-php/actions/workflows/codeql.yml)
-[![Coverage](https://codecov.io/gh/poli-page/sdk-php/branch/main/graph/badge.svg)](https://codecov.io/gh/poli-page/sdk-php)
-[![PHP Version](https://img.shields.io/packagist/php-v/poli-page/sdk.svg)](https://packagist.org/packages/poli-page/sdk)
-[![Downloads](https://img.shields.io/packagist/dt/poli-page/sdk.svg)](https://packagist.org/packages/poli-page/sdk)
-[![PHPStan](https://img.shields.io/badge/PHPStan-max-brightgreen.svg)](phpstan.neon)
-[![Docs](https://img.shields.io/badge/docs-online-brightgreen.svg)](https://poli-page.github.io/sdk-php/)
-[![License](https://img.shields.io/packagist/l/poli-page/sdk.svg)](LICENSE)
+[![Packagist](https://img.shields.io/packagist/v/poli-page/sdk?style=flat&labelColor=334155&logo=php&logoColor=ffffff&label=Packagist&color=0ea5e9)](https://packagist.org/packages/poli-page/sdk)
+[![Downloads](https://img.shields.io/packagist/dt/poli-page/sdk?style=flat&labelColor=334155&logo=php&logoColor=ffffff&label=Downloads&color=0ea5e9)](https://packagist.org/packages/poli-page/sdk)
+[![Ci](https://img.shields.io/github/actions/workflow/status/poli-page/sdk-php/ci.yml?branch=main&style=flat&labelColor=334155&logo=githubactions&logoColor=ffffff&label=Ci)](https://github.com/poli-page/sdk-php/actions/workflows/ci.yml)
+[![Codeql](https://img.shields.io/github/actions/workflow/status/poli-page/sdk-php/codeql.yml?branch=main&style=flat&labelColor=334155&logo=github&logoColor=ffffff&label=Codeql)](https://github.com/poli-page/sdk-php/actions/workflows/codeql.yml)
+[![Coverage](https://img.shields.io/codecov/c/github/poli-page/sdk-php?style=flat&labelColor=334155&logo=codecov&logoColor=ffffff&label=Coverage)](https://codecov.io/gh/poli-page/sdk-php)
+[![Php](https://img.shields.io/packagist/php-v/poli-page/sdk?style=flat&labelColor=334155&logo=php&logoColor=ffffff&label=Php&color=0ea5e9)](https://packagist.org/packages/poli-page/sdk)
+[![Phpstan](https://img.shields.io/badge/Phpstan-max-0ea5e9?style=flat&labelColor=334155&logo=php&logoColor=ffffff)](phpstan.neon)
+[![Docs](https://img.shields.io/badge/Docs-online-059669?style=flat&labelColor=334155&logo=readthedocs&logoColor=ffffff)](https://poli-page.github.io/sdk-php/)
+[![License](https://img.shields.io/packagist/l/poli-page/sdk?style=flat&labelColor=334155&logo=gnu&logoColor=ffffff&label=License&color=0ea5e9)](LICENSE)
 
 Official PHP SDK for [Poli Page](https://poli.page) — render polished PDFs from HTML templates via the Poli Page API.
 
