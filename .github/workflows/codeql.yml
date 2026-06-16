@@ -1,0 +1,58 @@
+name: CodeQL
+
+# CodeQL has no PHP analyzer; this workflow scans the GitHub Actions
+# YAML for supply-chain issues (script injection via untrusted inputs,
+# unsafe `pull_request_target` use, unpinned third-party actions, etc.).
+# Narrow scope, but it covers the part of the repo most likely to be
+# attacked: the CI itself.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly re-scan with the latest CodeQL queries — catches new rules
+    # against unchanged workflows. Off-peak Tuesday 09:17 UTC.
+    - cron: '17 9 * * 2'
+
+# Default to read-only token; the analyze job escalates explicitly.
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    # `security-events: write` is required to upload SARIF results to
+    # the Security tab. The other two are CodeQL's documented minimums.
+    # Re-stating `contents: read` because job-level permissions REPLACE
+    # the workflow-level block, they do not merge.
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # One entry for now. Listed as a matrix so adding another
+        # language later is a one-line change instead of a refactor.
+        language: [actions]
+    steps:
+      # SHA-pinned third-party actions per cross-SDK security policy.
+      # Refresh via `gh api repos/<owner>/<repo>/git/refs/tags/<tag>`
+      # and bump the trailing `# vX.Y.Z` comment in the same commit.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          languages: ${{ matrix.language }}
+          # `build-mode: none` is the only valid mode for the `actions`
+          # language — there is nothing to compile.
+          build-mode: none
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@8aad20d150bbac5944a9f9d289da16a4b0d87c1e # v4.36.2
+        with:
+          category: "/language:${{ matrix.language }}"
