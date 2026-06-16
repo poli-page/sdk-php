@@ -7,6 +7,7 @@
 [![Coverage](https://img.shields.io/codecov/c/github/poli-page/sdk-php?style=flat&logo=codecov&logoColor=ffffff&label=Coverage)](https://codecov.io/gh/poli-page/sdk-php)
 [![Php](https://img.shields.io/packagist/php-v/poli-page/sdk?style=flat&logo=php&logoColor=ffffff&label=Php)](https://packagist.org/packages/poli-page/sdk)
 [![Phpstan](https://img.shields.io/badge/Phpstan-max-blue?style=flat&logo=php&logoColor=ffffff)](phpstan.neon)
+[![Deps](https://img.shields.io/badge/Deps-up%20to%20date-brightgreen?style=flat&logo=php&logoColor=ffffff)](https://github.com/poli-page/sdk-php/network/dependencies)
 [![Docs](https://img.shields.io/badge/Docs-online-brightgreen?style=flat&logo=readthedocs&logoColor=ffffff)](https://poli-page.github.io/sdk-php/)
 [![License](https://img.shields.io/packagist/l/poli-page/sdk?style=flat&logo=gnu&logoColor=ffffff&label=License)](LICENSE)
 
