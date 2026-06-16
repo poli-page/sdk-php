@@ -3,6 +3,9 @@
 [![Packagist Version](https://img.shields.io/packagist/v/poli-page/sdk.svg)](https://packagist.org/packages/poli-page/sdk)
 [![CI](https://github.com/poli-page/sdk-php/actions/workflows/ci.yml/badge.svg)](https://github.com/poli-page/sdk-php/actions/workflows/ci.yml)
 [![PHP Version](https://img.shields.io/packagist/php-v/poli-page/sdk.svg)](https://packagist.org/packages/poli-page/sdk)
+[![Downloads](https://img.shields.io/packagist/dt/poli-page/sdk.svg)](https://packagist.org/packages/poli-page/sdk)
+[![PHPStan](https://img.shields.io/badge/PHPStan-max-brightgreen.svg)](phpstan.neon)
+[![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://poli-page.github.io/sdk-php/)
 [![License](https://img.shields.io/packagist/l/poli-page/sdk.svg)](LICENSE)
 
 Official PHP SDK for [Poli Page](https://poli.page) — render polished PDFs from HTML templates via the Poli Page API.
