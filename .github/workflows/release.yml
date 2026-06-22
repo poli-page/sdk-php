@@ -3,10 +3,14 @@ name: Release
 # Tag-triggered release pipeline. Packagist has no upload step — a release is
 # published the moment the package's update API is pinged (or its webhook
 # fires). To keep a human in the loop we deliberately do NOT install the
-# Packagist auto-update webhook; instead this workflow validates the tagged
-# commit, pauses at the `release` Environment for manual approval, and only
-# then notifies Packagist. The tag push is the trigger; the Approve button is
-# the publish.
+# Packagist auto-update webhook; instead this workflow runs the full test
+# matrix + a version check, pauses at the `packagist-release` Environment for
+# manual approval, and only then notifies Packagist. The tag push is the
+# trigger; the Approve button is the publish.
+#
+# The publish job needs BOTH the full matrix (test.yml, the same one CI runs)
+# and the version check, so the approval is never offered while anything is
+# failing.
 on:
   push:
     tags:
@@ -19,49 +23,29 @@ permissions:
   contents: read
 
 jobs:
-  validate:
-    name: Validate tag (PHP ${{ matrix.php-version }})
+  # Full cross-OS / cross-PHP matrix on the tagged commit — identical to CI.
+  test:
+    permissions:
+      contents: read
+      id-token: write # Codecov OIDC, granted to the called workflow
+    uses: ./.github/workflows/test.yml
+
+  validate-version:
+    name: Version matches tag
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    strategy:
-      fail-fast: true
-      matrix:
-        php-version: ['8.3', '8.4', '8.5']
     steps:
-      # SHA-pinned third-party actions per cross-SDK security policy. Refresh
-      # via `gh api repos/<owner>/<repo>/git/refs/tags/<tag> --jq .object.sha`
-      # and bump the trailing `# vX.Y.Z` comment in the same commit.
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
-          php-version: ${{ matrix.php-version }}
+          php-version: '8.3'
           coverage: none
           tools: composer:v2
 
-      - name: Validate composer.json
-        run: composer validate --strict
-
-      # No committed lockfile (library convention) — `composer update` resolves
-      # the same way `install` would with no lock. `--no-scripts` defangs
-      # lifecycle hooks in compromised transitive deps.
       - name: Install dependencies
         run: composer update --prefer-stable --no-progress --no-interaction --no-scripts
-
-      - name: Lint (PHP-CS-Fixer)
-        env:
-          PHP_CS_FIXER_IGNORE_ENV: 1
-        run: vendor/bin/php-cs-fixer fix --dry-run --diff
-
-      - name: Static analysis (PHPStan)
-        run: vendor/bin/phpstan analyse --no-progress
-
-      - name: Security audit (composer audit)
-        run: composer audit --abandoned=report
-
-      - name: Test (PHPUnit)
-        run: vendor/bin/phpunit --testsuite=unit
 
       # The published version is inferred from the git tag, but the SDK also
       # carries Version::VERSION for runtime/static-analysis. They must agree —
@@ -79,11 +63,13 @@ jobs:
 
   publish:
     name: Publish to Packagist
-    needs: validate
+    needs: [test, validate-version]
     runs-on: ubuntu-latest
     # The Environment is the approval gate: `packagist-release` is configured
     # in repo Settings → Environments with required reviewers. The job will not
     # start until a reviewer approves, so nothing reaches Packagist before then.
+    # Because it `needs` both jobs above, the approval is never offered unless
+    # the full matrix and the version check are green.
     environment: packagist-release
     permissions:
       contents: write # create the GitHub Release
