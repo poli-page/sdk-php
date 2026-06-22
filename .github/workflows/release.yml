@@ -1,0 +1,142 @@
+name: Release
+
+# Tag-triggered release pipeline. Packagist has no upload step — a release is
+# published the moment the package's update API is pinged (or its webhook
+# fires). To keep a human in the loop we deliberately do NOT install the
+# Packagist auto-update webhook; instead this workflow validates the tagged
+# commit, pauses at the `release` Environment for manual approval, and only
+# then notifies Packagist. The tag push is the trigger; the Approve button is
+# the publish.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*' # prereleases (e.g. v2.0.0-rc1)
+
+# Default to read-only; the publish job grants itself contents:write for the
+# GitHub Release.
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate tag (PHP ${{ matrix.php-version }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        php-version: ['8.3', '8.4', '8.5']
+    steps:
+      # SHA-pinned third-party actions per cross-SDK security policy. Refresh
+      # via `gh api repos/<owner>/<repo>/git/refs/tags/<tag> --jq .object.sha`
+      # and bump the trailing `# vX.Y.Z` comment in the same commit.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+        with:
+          php-version: ${{ matrix.php-version }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      # No committed lockfile (library convention) — `composer update` resolves
+      # the same way `install` would with no lock. `--no-scripts` defangs
+      # lifecycle hooks in compromised transitive deps.
+      - name: Install dependencies
+        run: composer update --prefer-stable --no-progress --no-interaction --no-scripts
+
+      - name: Lint (PHP-CS-Fixer)
+        env:
+          PHP_CS_FIXER_IGNORE_ENV: 1
+        run: vendor/bin/php-cs-fixer fix --dry-run --diff
+
+      - name: Static analysis (PHPStan)
+        run: vendor/bin/phpstan analyse --no-progress
+
+      - name: Security audit (composer audit)
+        run: composer audit --abandoned=report
+
+      - name: Test (PHPUnit)
+        run: vendor/bin/phpunit --testsuite=unit
+
+      # The published version is inferred from the git tag, but the SDK also
+      # carries Version::VERSION for runtime/static-analysis. They must agree —
+      # a mismatch means the release commit forgot to bump the constant.
+      - name: VERSION constant matches tag
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          code="$(php -r 'require "vendor/autoload.php"; echo PoliPage\Internal\Version::VERSION;')"
+          if [ "$tag" != "$code" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match Version::VERSION ($code)"
+            exit 1
+          fi
+          echo "Tag matches Version::VERSION: $code"
+
+  publish:
+    name: Publish to Packagist
+    needs: validate
+    runs-on: ubuntu-latest
+    # The Environment is the approval gate: `packagist-release` is configured
+    # in repo Settings → Environments with required reviewers. The job will not
+    # start until a reviewer approves, so nothing reaches Packagist before then.
+    environment: packagist-release
+    permissions:
+      contents: write # create the GitHub Release
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      # This is the publish. Packagist re-crawls the repo, sees the new tag,
+      # and indexes the version. Accepts 200 (done) or 202 (queued).
+      - name: Notify Packagist
+        env:
+          PACKAGIST_USERNAME: ${{ secrets.PACKAGIST_USERNAME }}
+          PACKAGIST_API_TOKEN: ${{ secrets.PACKAGIST_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/packagist.out -w '%{http_code}' -XPOST \
+            -H 'content-type: application/json' \
+            "https://packagist.org/api/update-package?username=${PACKAGIST_USERNAME}&apiToken=${PACKAGIST_API_TOKEN}" \
+            -d '{"repository":{"url":"https://github.com/poli-page/sdk-php"}}')"
+          cat /tmp/packagist.out; echo
+          if [ "$code" != "200" ] && [ "$code" != "202" ]; then
+            echo "::error::Packagist update API returned HTTP $code"
+            exit 1
+          fi
+          echo "Packagist notified (HTTP $code)."
+
+      # Pull the matching CHANGELOG section for the release body. Falls back to
+      # a pointer if the section is absent so the release never fails on notes.
+      - name: Extract CHANGELOG section
+        id: changelog
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          notes="${RUNNER_TEMP}/release-notes.md"
+          awk -v ver="$version" '
+            $0 ~ "^## \\[" ver "\\]" { capture = 1; next }
+            capture && /^## \[/        { exit }
+            capture                    { print }
+          ' CHANGELOG.md > "$notes"
+          if [ ! -s "$notes" ]; then
+            echo "_See [CHANGELOG.md](CHANGELOG.md) for details._" > "$notes"
+          fi
+          echo "notes_file=$notes" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          prerelease=()
+          case "${GITHUB_REF_NAME}" in
+            *-*) prerelease=(--prerelease) ;;
+          esac
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file "${{ steps.changelog.outputs.notes_file }}" \
+            "${prerelease[@]}"
