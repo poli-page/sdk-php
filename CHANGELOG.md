@@ -7,9 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-05-21
+## [0.9.0] - 2026-06-22
 
-The first stable release.
+The first public release. The API surface is complete but not yet frozen;
+breaking changes may still land before 1.0.0.
 
 ### Added
 
@@ -88,5 +89,5 @@ The first stable release.
   macOS and Windows for 8.5. `composer validate --strict`,
   `composer audit`, lint, static analysis, and unit tests all gated.
 
-[Unreleased]: https://github.com/poli-page/sdk-php/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/poli-page/sdk-php/releases/tag/v1.0.0
+[Unreleased]: https://github.com/poli-page/sdk-php/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/poli-page/sdk-php/releases/tag/v0.9.0
