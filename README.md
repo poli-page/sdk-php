@@ -9,7 +9,7 @@
 [![Phpstan](https://img.shields.io/badge/Phpstan-max-blue?style=flat&logo=php&logoColor=ffffff)](phpstan.neon)
 [![Deps](https://img.shields.io/badge/Deps-up%20to%20date-brightgreen?style=flat&logo=php&logoColor=ffffff)](https://github.com/poli-page/sdk-php/network/dependencies)
 [![Docs](https://img.shields.io/badge/Docs-online-brightgreen?style=flat&logo=readthedocs&logoColor=ffffff)](https://poli-page.github.io/sdk-php/)
-[![License](https://img.shields.io/packagist/l/poli-page/sdk?style=flat&logo=gnu&logoColor=ffffff&label=License)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-blue?style=flat&logo=gnu&logoColor=ffffff)](LICENSE)
 
 Official PHP SDK for [Poli Page](https://poli.page) — render polished PDFs from HTML templates via the Poli Page API.
 
