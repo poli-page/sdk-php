@@ -17,24 +17,24 @@ Official PHP SDK for [Poli Page](https://poli.page) — render polished PDFs fro
 
 ## Install
 
+The SDK declares only [PSR-18](https://www.php-fig.org/psr/psr-18/) / [PSR-17](https://www.php-fig.org/psr/psr-17/) / [PSR-3](https://www.php-fig.org/psr/psr-3/) interfaces plus [`php-http/discovery`](https://github.com/php-http/discovery) as hard dependencies — it deliberately ships **no** concrete HTTP client. You **must** install a PSR-18 client and a PSR-7 / PSR-17 implementation alongside it, or constructing the client will throw (discovery finds nothing to use). Install both in one command:
+
 ```bash
-composer require poli-page/sdk
+# Guzzle (~80% of PHP apps) — the canonical choice
+composer require poli-page/sdk guzzlehttp/guzzle
 ```
 
-The SDK declares only [PSR-18](https://www.php-fig.org/psr/psr-18/) / [PSR-17](https://www.php-fig.org/psr/psr-17/) / [PSR-3](https://www.php-fig.org/psr/psr-3/) interfaces plus [`php-http/discovery`](https://github.com/php-http/discovery) as hard dependencies — pick any concrete HTTP client and PSR-7 implementation you like. The most common pairings:
+Guzzle bundles its own PSR-7 / PSR-17 implementation, so that single line is everything you need. Prefer something else? Any PSR-18 client + PSR-7 pairing works:
 
 ```bash
-# Guzzle (~80% of PHP apps)
-composer require guzzlehttp/guzzle guzzlehttp/psr7
-
 # Symfony HTTP Client
-composer require symfony/http-client nyholm/psr7
+composer require poli-page/sdk symfony/http-client nyholm/psr7
 
 # Lightweight, no curl needed
-composer require php-http/curl-client nyholm/psr7
+composer require poli-page/sdk php-http/curl-client nyholm/psr7
 ```
 
-Discovery auto-detects whichever you've installed.
+Discovery auto-detects whichever you've installed; you never name it in code (or pass it explicitly via the `httpClient:` constructor argument — see [Configuration](#configuration)).
 
 Requires PHP 8.3 or later.
 
