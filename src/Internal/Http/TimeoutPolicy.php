@@ -28,10 +28,16 @@ use Psr\Http\Message\ResponseInterface;
  *    `$client->sendRequest($request)`, so the client's own configured
  *    timeout still applies.
  *
- * Timeout-vs-network detection on caught exceptions runs on the same
- * client-specific knowledge: Guzzle's `ConnectException` carries a
- * `getHandlerContext()['errno']` of 28 (CURLE_OPERATION_TIMEDOUT) when
- * cURL itself reports a timeout.
+ * Timeout-vs-network detection on caught exceptions is done by message
+ * text. Across the clients we care about a transport timeout always
+ * surfaces a "timed out"/"timeout" string in the exception message:
+ * Guzzle (both 7's `ConnectException` and 8's typed timeout exceptions
+ * carry "cURL error 28: Operation timed out" / "Connection timed out"),
+ * Symfony's `TransportException`, and php-http/curl-client. Sniffing the
+ * message keeps this to one code path that works identically on every
+ * supported client and Guzzle major, with no version-specific API — the
+ * SDK's constraint spans `guzzlehttp/guzzle ^7.8 || ^8.0`, which do not
+ * share a common typed-timeout API.
  *
  * @internal
  */
@@ -66,23 +72,9 @@ final class TimeoutPolicy
      */
     public static function isTimeout(ClientExceptionInterface $e): bool
     {
-        // Guzzle: cURL error 28 = CURLE_OPERATION_TIMEDOUT
-        if (class_exists(\GuzzleHttp\Exception\ConnectException::class)
-            && $e instanceof \GuzzleHttp\Exception\ConnectException
-        ) {
-            $context = $e->getHandlerContext();
-            $errno = $context['errno'] ?? null;
-            if (is_int($errno) && $errno === 28) {
-                return true;
-            }
-        }
-        // Fallback: message-text sniffing covers Symfony's TransportException,
-        // php-http/curl-client, and any client that surfaces a recognisable
-        // timeout string. Best-effort only.
         $msg = strtolower($e->getMessage());
 
         return str_contains($msg, 'timed out')
-            || str_contains($msg, 'timeout')
-            || str_contains($msg, 'operation timed out');
+            || str_contains($msg, 'timeout');
     }
 }
