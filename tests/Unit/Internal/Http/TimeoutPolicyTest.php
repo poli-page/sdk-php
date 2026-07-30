@@ -46,23 +46,24 @@ final class TimeoutPolicyTest extends TestCase
         self::assertSame(204, $response->getStatusCode());
     }
 
-    public function testIsTimeoutDetectsCurlError28InGuzzleConnectException(): void
+    public function testIsTimeoutDetectsGuzzleConnectTimeout(): void
     {
         if (!class_exists(\GuzzleHttp\Exception\ConnectException::class)) {
             self::markTestSkipped('guzzlehttp/guzzle not installed in this matrix combination');
         }
         $request = (new Psr17Factory())->createRequest('GET', 'https://example.test/x');
+        // cURL error 28 = CURLE_OPERATION_TIMEDOUT. The message wording is
+        // identical across Guzzle 7's ConnectException and Guzzle 8's typed
+        // timeout exceptions, so this covers both majors.
         $exception = new \GuzzleHttp\Exception\ConnectException(
-            'cURL error 28: Operation timed out',
+            'cURL error 28: Operation timed out after 5000 milliseconds',
             $request,
-            null,
-            ['errno' => 28, 'error' => 'Operation timed out'],
         );
 
         self::assertTrue(TimeoutPolicy::isTimeout($exception));
     }
 
-    public function testIsTimeoutReturnsFalseForGuzzleConnectExceptionWithDifferentErrno(): void
+    public function testIsTimeoutReturnsFalseForNonTimeoutGuzzleConnectException(): void
     {
         if (!class_exists(\GuzzleHttp\Exception\ConnectException::class)) {
             self::markTestSkipped('guzzlehttp/guzzle not installed in this matrix combination');
@@ -71,8 +72,6 @@ final class TimeoutPolicyTest extends TestCase
         $exception = new \GuzzleHttp\Exception\ConnectException(
             'cURL error 6: Could not resolve host',
             $request,
-            null,
-            ['errno' => 6, 'error' => 'Could not resolve host'],
         );
 
         self::assertFalse(TimeoutPolicy::isTimeout($exception));
