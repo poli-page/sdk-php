@@ -1,0 +1,92 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit config for poli-page repos. PRs here are mostly opened and fixed by automated agents
+# (the poli-page auto loop and issue pipeline), which read CodeRabbit's findings and its commit status.
+language: en-US
+early_access: false
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  allow_author_approval: true
+  # The summary goes in the walkthrough, never in the PR description: the merge gate reads the description.
+  high_level_summary: false
+  high_level_summary_in_walkthrough: true
+  review_status: true
+  review_details: false
+  # The loop decides "reviewed this head" from the CodeRabbit commit status ("Review completed").
+  review_progress: true
+  commit_status: true
+  fail_commit_status: false
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  # PR labels are the closed issues' labels; CodeRabbit only suggests.
+  auto_apply_labels: false
+  suggested_reviewers: true
+  auto_assign_reviewers: false
+  in_progress_fortune: false
+  poem: false
+  enable_prompt_for_ai_agents: true
+  abort_on_close: true
+  disable_cache: false
+  slop_detection:
+    enabled: true
+    include_all_authors: false
+  auto_review:
+    enabled: true
+    drafts: false
+    # Every push of a fix round must be reviewed, and never auto-paused (the loop allows up to 5 rounds).
+    auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 0
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+  path_filters:
+    - "!composer.lock"
+    - "!vendor/**"
+    - "!coverage/**"
+    - "!.phpunit.cache/**"
+    - "!docs/package-lock.json"
+    - "!docs/dist/**"
+    - "!docs/.astro/**"
+    - "!docs/node_modules/**"
+    - "!docs/src/content/docs/reference/**"
+    - "!scripts/extract-api/vendor/**"
+    - "!scripts/extract-api/composer.lock"
+  path_instructions:
+    - path: "src/**/*.php"
+      instructions: >-
+        This is the public PHP SDK (Packagist poli-page/sdk, PHP ^8.3). Public classes and method
+        signatures must stay consistent with the other poli-page SDKs and the API spec. Flag any
+        breaking change to the public API unless it ships in a major version. Keep declare(strict_types=1)
+        and full type declarations, and keep the code PHPStan max / strict-rules clean.
+    - path: "src/Exception/**/*.php"
+      instructions: >-
+        API errors arrive as { error: { code, message } } and must map to typed exceptions that
+        carry the error code. 4xx must never be retried; 5xx and network failures retry with
+        backoff and honour Retry-After. Never leak the API key in exception messages or logs.
+    - path: "src/Internal/**/*.php"
+      instructions: >-
+        Internal helpers. The SDK depends only on PSR-18, PSR-17, PSR-7 and PSR-3 interfaces plus
+        php-http/discovery and ships no concrete HTTP client. Do not add a hard dependency on a
+        specific HTTP client or logger.
+    - path: "tests/**/*.php"
+      instructions: >-
+        PHPUnit 11. Every public method, error path and retry edge case needs a test, mirroring
+        the src/ structure, with unit tests under tests/Unit and live-API tests under tests/Integration.
+        Tests use a mock PSR-18 client, never the network. Prefer asserting the field that matters over
+        snapshotting large objects.
+    - path: "examples/**/*.php"
+      instructions: >-
+        Sample code that customers copy. The API key comes from an environment variable, never a
+        literal. Examples must run as written against the current public API and match the README.
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "CLAUDE.md"
+      - "CONTRIBUTING.md"
