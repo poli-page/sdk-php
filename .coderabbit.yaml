@@ -66,7 +66,7 @@ reviews:
         and full type declarations, and keep the code PHPStan max / strict-rules clean.
     - path: "src/Exception/**/*.php"
       instructions: >-
-        API errors arrive as { error: { code, message } } and must map to typed exceptions that
+        API errors arrive as { error: CODE_STRING, detail?, issues? } (flat, API spec §4.1) and must map to typed exceptions that
         carry the error code. 4xx must never be retried; 5xx and network failures retry with
         backoff and honour Retry-After. Never leak the API key in exception messages or logs.
     - path: "src/Internal/**/*.php"
