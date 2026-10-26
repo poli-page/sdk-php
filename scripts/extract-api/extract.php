@@ -80,6 +80,7 @@ fwrite(STDOUT, "extractor: wrote {$referenceOut}\n");
 function renderErrorCodes(): array
 {
     return [
+        'INVALID_API_KEY', 'ORGANIZATION_PAYMENT_GRACE', 'RATE_LIMIT_EXCEEDED',
         'VALIDATION_ERROR', 'PROJECT_NOT_FOUND', 'PROJECT_NOT_IN_ENVIRONMENT', 'TEMPLATE_NOT_FOUND',
         'TEMPLATE_ERROR', 'QUOTA_EXCEEDED', 'PUBLISH_IN_PROGRESS', 'timeout', 'network_error', 'INTERNAL_ERROR',
     ];
