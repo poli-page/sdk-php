@@ -75,15 +75,63 @@ fwrite(STDOUT, "extractor: wrote {$referenceOut}\n");
 // ---------------------------------------------------------------------------
 
 /**
+ * Auth codes of every API call. The SDK only rejects an empty key, so a key
+ * without the `pp_` prefix reaches the API and gets `MISSING_API_KEY`.
+ *
+ * @return list<string>
+ */
+function authErrorCodes(): array
+{
+    return ['MISSING_API_KEY', 'INVALID_API_KEY', 'ORGANIZATION_PURGED'];
+}
+
+/**
+ * Org-state gates the API applies to every call that is not a GET.
+ *
+ * @return list<string>
+ */
+function writeGateErrorCodes(): array
+{
+    return ['ORGANIZATION_PAYMENT_GRACE', 'ORGANIZATION_CANCELLED', 'ORGANIZATION_MIGRATING'];
+}
+
+/**
+ * Server and transport codes of every API call; `unknown_error` is an error
+ * body without a code.
+ *
+ * @return list<string>
+ */
+function serverErrorCodes(): array
+{
+    return ['STORAGE_ACCESS_DENIED', 'INTERNAL_ERROR', 'unknown_error', 'timeout', 'network_error'];
+}
+
+/**
+ * `MISSING_DATA`, `MISSING_TEMPLATE_SLUG` and `ENVIRONMENT_MISMATCH` are left
+ * out: `RenderInput` always sends `data`, a string `template` and no
+ * `environment`, so the API cannot answer them to this SDK.
+ *
  * @return list<string>
  */
 function renderErrorCodes(): array
 {
     return [
-        'INVALID_API_KEY', 'ORGANIZATION_PAYMENT_GRACE', 'RATE_LIMIT_EXCEEDED',
-        'VALIDATION_ERROR', 'PROJECT_NOT_FOUND', 'PROJECT_NOT_IN_ENVIRONMENT', 'TEMPLATE_NOT_FOUND',
-        'TEMPLATE_ERROR', 'QUOTA_EXCEEDED', 'PUBLISH_IN_PROGRESS', 'timeout', 'network_error', 'INTERNAL_ERROR',
+        'PROJECT_REQUIRED_FOR_DOCUMENT', 'invalid_options',
+        ...authErrorCodes(), ...writeGateErrorCodes(),
+        'RATE_LIMIT_EXCEEDED', 'VALIDATION_ERROR', 'RENDER_BODY_TOO_LARGE',
+        'PROJECT_NOT_FOUND', 'PROJECT_NOT_IN_ENVIRONMENT', 'TEMPLATE_NOT_FOUND',
+        'TEMPLATE_ERROR', 'EMPTY_DOCUMENT', 'DOCUMENT_TOO_LARGE', 'RENDER_TIMEOUT',
+        'QUOTA_EXCEEDED', 'OVERAGE_CAP_EXCEEDED', 'PUBLISH_IN_PROGRESS',
+        ...serverErrorCodes(),
     ];
+}
+
+/**
+ * @return list<string>
+ */
+function renderPdfErrorCodes(): array
+{
+    return [...renderErrorCodes(), 'DOWNLOAD_FAILED'];
 }
 
 /**
@@ -106,7 +154,7 @@ function methodTargets(): array
             'class' => \PoliPage\Render::class,
             'method' => 'pdf',
             'example' => 'render-pdf.php',
-            'errorCodes' => renderErrorCodes(),
+            'errorCodes' => renderPdfErrorCodes(),
         ],
         [
             'slug' => 'render-pdf-stream',
@@ -114,7 +162,7 @@ function methodTargets(): array
             'class' => \PoliPage\Render::class,
             'method' => 'pdfStream',
             'example' => 'render-pdf-stream.php',
-            'errorCodes' => renderErrorCodes(),
+            'errorCodes' => renderPdfErrorCodes(),
         ],
         [
             'slug' => 'render-document',
@@ -130,7 +178,9 @@ function methodTargets(): array
             'class' => \PoliPage\Documents::class,
             'method' => 'get',
             'example' => 'documents-get.php',
-            'errorCodes' => ['DOCUMENT_NOT_FOUND', 'DOCUMENT_GONE', 'FORBIDDEN', 'INVALID_API_KEY', 'INTERNAL_ERROR'],
+            'errorCodes' => [
+                ...authErrorCodes(), 'DOCUMENT_NOT_FOUND', 'FORBIDDEN', 'DOCUMENT_GONE', ...serverErrorCodes(),
+            ],
         ],
         [
             'slug' => 'documents-preview',
@@ -138,7 +188,9 @@ function methodTargets(): array
             'class' => \PoliPage\Documents::class,
             'method' => 'preview',
             'example' => 'documents-preview.php',
-            'errorCodes' => ['DOCUMENT_NOT_FOUND', 'DOCUMENT_GONE', 'FORBIDDEN', 'INVALID_API_KEY', 'INTERNAL_ERROR'],
+            'errorCodes' => [
+                ...authErrorCodes(), 'DOCUMENT_NOT_FOUND', 'FORBIDDEN', 'DOCUMENT_GONE', ...serverErrorCodes(),
+            ],
         ],
         [
             'slug' => 'documents-thumbnails',
@@ -146,7 +198,11 @@ function methodTargets(): array
             'class' => \PoliPage\Documents::class,
             'method' => 'thumbnails',
             'example' => 'documents-thumbnails.php',
-            'errorCodes' => ['DOCUMENT_NOT_FOUND', 'DOCUMENT_GONE', 'VALIDATION_ERROR', 'THUMBNAILS_NOT_AVAILABLE', 'INVALID_API_KEY', 'INTERNAL_ERROR'],
+            'errorCodes' => [
+                'invalid_options', ...authErrorCodes(), ...writeGateErrorCodes(),
+                'DOCUMENT_NOT_FOUND', 'FORBIDDEN', 'DOCUMENT_GONE', 'THUMBNAILS_NOT_AVAILABLE',
+                'VALIDATION_ERROR', 'QUOTA_EXCEEDED', 'OVERAGE_CAP_EXCEEDED', ...serverErrorCodes(),
+            ],
         ],
         [
             'slug' => 'documents-delete',
@@ -154,7 +210,10 @@ function methodTargets(): array
             'class' => \PoliPage\Documents::class,
             'method' => 'delete',
             'example' => 'documents-delete.php',
-            'errorCodes' => ['DOCUMENT_NOT_FOUND', 'FORBIDDEN', 'ENVIRONMENT_PROTECTED', 'INVALID_API_KEY', 'INTERNAL_ERROR'],
+            'errorCodes' => [
+                ...authErrorCodes(), ...writeGateErrorCodes(),
+                'DOCUMENT_NOT_FOUND', 'FORBIDDEN', 'ENVIRONMENT_PROTECTED', ...serverErrorCodes(),
+            ],
         ],
         [
             'slug' => 'render-to-file',
@@ -163,7 +222,7 @@ function methodTargets(): array
             'method' => null,
             'function' => 'PoliPage\\renderToFile',
             'example' => 'render-to-file.php',
-            'errorCodes' => [...renderErrorCodes(), 'invalid_options'],
+            'errorCodes' => renderPdfErrorCodes(),
         ],
     ];
 }
@@ -451,6 +510,15 @@ function assertErrorCodesMatchSdk(): void
         fwrite(STDERR, 'extractor: error codes out of sync with PoliPageException'
             . ' (undocumented: ' . implode(', ', $missing) . '; not in the SDK: ' . implode(', ', $unknown) . ")\n");
         exit(1);
+    }
+    foreach (methodTargets() as $target) {
+        $codes = $target['errorCodes'];
+        $undocumented = array_diff($codes, $documented);
+        if ($undocumented !== [] || count($codes) !== count(array_unique($codes))) {
+            fwrite(STDERR, "extractor: {$target['slug']} error codes are duplicated or not on the errors page"
+                . ' (' . implode(', ', $undocumented) . ")\n");
+            exit(1);
+        }
     }
 }
 
