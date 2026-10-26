@@ -44,7 +44,7 @@ For OpenTelemetry, start a span at the call site (the SDK does not control the p
 require __DIR__ . '/vendor/autoload.php';
 
 use PoliPage\PoliPage;
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
 
 $client = new PoliPage(
     apiKey: $_ENV['POLI_PAGE_API_KEY'],
@@ -62,7 +62,7 @@ $client = new PoliPage(
     )),
 );
 
-$client->render->pdf(new ProjectModeInput(
+$client->render->pdf(new RenderInput(
     project: 'billing',
     template: 'invoice',
     data: ['invoiceNumber' => 'INV-001'],

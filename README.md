@@ -40,66 +40,51 @@ Requires PHP 8.3 or later.
 
 ## Quick start
 
-### Project mode — render a published template by slug
+### Render the `getting-started` template
 
 ```php
 use PoliPage\PoliPage;
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
 
 $client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
 
-$pdf = $client->render->pdf(new ProjectModeInput(
+$pdf = $client->render->pdf(new RenderInput(
     project: 'getting-started',
     template: 'welcome',
-    version: '1.0.0',
-    data: ['name' => 'World'],
+    data: ['name' => 'SDK Demo'],
 ));
 // $pdf is a string of raw PDF bytes
 ```
 
-Every Poli Page org comes pre-provisioned with a `getting-started/welcome` template, so the snippet above runs as-is the moment you have an API key — no project setup needed. For your own templates, swap the slugs once you've pushed a version with the `poli` CLI:
+Every Poli Page organization gets a `getting-started` project, published into its `sandbox` environment when the organization is created, with a `welcome` template. With a sandbox key (`pp_sandbox_…`) in `POLI_PAGE_API_KEY`, the snippet above runs as-is on a fresh organization — no project setup needed. `getting-started` is a normal, editable project: if your organization renamed it, deleted it or removed it from `sandbox`, the API answers `404 PROJECT_NOT_FOUND` or `404 PROJECT_NOT_IN_ENVIRONMENT`, so use a fresh organization.
+
+There is no version to pick: a render uses the project's copy published in the key's environment. For your own templates, publish the project to the key's environment, then swap the slugs:
 
 ```php
-$pdf = $client->render->pdf(new ProjectModeInput(
+$pdf = $client->render->pdf(new RenderInput(
     project: 'billing',
     template: 'invoice',
-    version: '1.0.0',
     data: ['invoiceNumber' => 'INV-001', 'total' => 1280],
 ));
 ```
 
-### Preview inline HTML
-
-`render->preview` accepts raw HTML for live editing and visual inspection without producing a stored document. Use this for editor previews or layout tests.
-
-```php
-use PoliPage\InlineModeInput;
-
-$result = $client->render->preview(new InlineModeInput(
-    template: '<h1>Hello {{ name }}</h1>',
-    data: ['name' => 'World'],
-));
-echo "Rendered {$result->totalPages} page(s) in {$result->environment} mode\n";
-```
-
-**`render->pdf`, `render->pdfStream`, and `render->document` require project mode** — `project` + `template`, optionally pinned to a specific `version` (omit to render the current draft). Inline HTML is only accepted by `render->preview`. The SDK enforces this via PHP's type system: `ProjectModeInput` and `InlineModeInput` are final readonly classes extending a sealed `RenderInput` base; the three document-producing methods type-hint `ProjectModeInput`, so passing inline mode is a `TypeError`. PHPStan / Psalm also catch the mismatch statically.
+To preview a template or try inline HTML, use the playground at [play.poli.page](https://play.poli.page): the API renders only published templates.
 
 ### Write a PDF to disk
 
 ```php
 use PoliPage\PoliPage;
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
 
 use function PoliPage\renderToFile;
 
 $client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
 renderToFile(
     $client,
-    new ProjectModeInput(
+    new RenderInput(
         project: 'getting-started',
         template: 'welcome',
-        version: '1.0.0',
-        data: ['name' => 'World'],
+        data: ['name' => 'SDK Demo'],
     ),
     './welcome.pdf',
 );
@@ -116,15 +101,28 @@ composer install
 php examples/demo.php
 ```
 
-First run prompts for a `pp_test_*` key and saves it to `.env`. Subsequent runs are silent. See `examples/demo.php` for the full walkthrough.
+The demo reads `POLI_PAGE_API_KEY` and the optional `POLI_PAGE_BASE_URL` from your shell or the repo-root `.env`. Without a key, the first run asks for a sandbox key (`pp_sandbox_…`), checks its shape against the full-key regex and saves it to `.env`; later runs are silent. Use a key of a fresh organization, whose `getting-started` project is untouched.
+
+It renders `getting-started`/`welcome` and walks nine steps, writing its output to `examples/output/`:
+
+1. `render->pdf()` — PDF bytes in memory
+2. `render->pdfStream()` — PSR-7 stream of PDF bytes
+3. `renderToFile()` — render straight to disk
+4. `render->document()` — store the document, return the descriptor
+5. `documents->get($id)` — re-fetch with a fresh presigned URL
+6. `documents->thumbnails($id)` — page thumbnails (Starter+ tier; skipped otherwise)
+7. `documents->preview($id)` — stored HTML of the rendered document
+8. `documents->delete($id)` — soft-delete the document
+9. not-found — renders the unknown template `does-not-exist`, catches the `404 TEMPLATE_NOT_FOUND` and prints its `code`, `status`, `message` and `requestId`
+
+See `examples/demo.php` for the annotated source.
 
 ### Stream — for large PDFs or piping to S3 / HTTP responses
 
 ```php
-$stream = $client->render->pdfStream(new ProjectModeInput(
+$stream = $client->render->pdfStream(new RenderInput(
     project: 'billing',
     template: 'invoice',
-    version: '1.0.0',
     data: ['invoiceNumber' => 'INV-001'],
 ));
 // $stream is a PSR-7 StreamInterface
@@ -148,10 +146,9 @@ use PoliPage\RenderMetadata;
 use PoliPage\ThumbnailOptions;
 
 // 1. Render and store
-$doc = $client->render->document(new ProjectModeInput(
+$doc = $client->render->document(new RenderInput(
     project: 'billing',
     template: 'invoice',
-    version: '1.0.0',
     data: ['invoiceNumber' => 'INV-001'],
     metadata: new RenderMetadata(['customerId' => 'cust_123']),  // your own audit data
 ));
@@ -178,13 +175,21 @@ The presigned URL has a 15-minute TTL. If `downloadPdf()` fails with `errorCode:
 
 ## Authentication & environments
 
-The mode is determined by the API key prefix:
+An API key belongs to exactly one environment of your organization, and every render uses the project's copy published in that environment. A key is `pp_{env}_{32 lowercase hex}`, where `{env}` is the environment's name; the full key matches:
 
-- `pp_test_…` → sandbox mode (not billed, generous rate limits)
-- `pp_live_…` → live mode (billed, production rate limits)
-- `pp_sa_…` → service-account keys; environment matches the SA's configuration (sandbox or live)
+```text
+^pp_(?=[a-z][a-z0-9-]{0,19}_)[a-z][a-z0-9]*(?:-[a-z0-9]+)*_[0-9a-f]{32}$
+```
 
-All prefixes hit the same endpoint (`https://api.poli.page`). The SDK passes the key through as a Bearer token and never inspects the prefix — pick whichever fits your deploy model.
+| Environment                           | Key            | Watermark | Counted |
+| ------------------------------------- | -------------- | --------- | ------- |
+| `sandbox` (every org)                 | `pp_sandbox_…` | yes       | no      |
+| `live` (every org, deletable on Pro+) | `pp_live_…`    | no        | yes     |
+| created on Pro+ (e.g. `staging`)      | `pp_staging_…` | no        | yes     |
+
+"Counted" means the render counts toward the organization's monthly PDF quota. `sandbox` renders are watermarked and not counted, and `sandbox` documents expire 30 days after creation. There is no watermark option: a template that wants a watermark outside `sandbox` uses the `poli-watermark` class.
+
+Every key hits the same endpoint (`https://api.poli.page`). Standard and service keys share this one format. The SDK passes the key through as a Bearer token and never inspects or validates it client-side — the API answers `401 INVALID_API_KEY` to a key it does not know.
 
 ## Methods
 
@@ -192,7 +197,6 @@ All prefixes hit the same endpoint (`https://api.poli.page`). The SDK passes the
 | ------ | ------- | ----------- |
 | `$client->render->pdf($input)` | `string` | Render a PDF, return raw bytes |
 | `$client->render->pdfStream($input)` | `Psr\Http\Message\StreamInterface` | Render and stream the response |
-| `$client->render->preview($input)` | `PreviewResult` | Paginated HTML preview |
 | `$client->render->document($input)` | `DocumentDescriptor` | Render and return descriptor (skip auto-download) |
 | `$client->documents->get($id)` | `DocumentDescriptor` | Retrieve a stored document |
 | `$client->documents->preview($id)` | `DocumentPreviewResult` | Stored document's paginated HTML |
@@ -211,7 +215,7 @@ $client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
 // Named-arg constructor — override what you need.
 $client = new PoliPage(
     apiKey: $_ENV['POLI_PAGE_API_KEY'],
-    baseUrl: 'https://api-develop.poli.page',
+    baseUrl: 'https://api.poli.page',
     maxRetries: 3,
     timeout: 60.0,
     logger: $monolog,
@@ -220,7 +224,7 @@ $client = new PoliPage(
 
 | Option | Type | Default | Description |
 | ------ | ---- | ------- | ----------- |
-| `apiKey` | `string` | (required) | `pp_test_*` or `pp_live_*` API key |
+| `apiKey` | `string` | (required) | API key of the environment to render in (`pp_{env}_…`, see [Authentication & environments](#authentication--environments)) |
 | `baseUrl` | `?string` | `https://api.poli.page` | API base URL |
 | `maxRetries` | `?int` | `2` | Max retry attempts on retryable errors |
 | `retryDelay` | `?float` (seconds) | `0.5` | Base delay before the first retry |
@@ -232,7 +236,7 @@ $client = new PoliPage(
 | `onRetry` | `?\Closure(RetryEvent): void` | — | Called before each retry sleep |
 | `onError` | `?\Closure(PoliPageException): void` | — | Called when a call terminates in error |
 
-Per-call overrides live on the input object itself: pass `timeout:` and/or `idempotencyKey:` to `ProjectModeInput` / `InlineModeInput` to override the client-level defaults for that one call.
+Per-call overrides live on the input object itself: pass `timeout:` and/or `idempotencyKey:` to `RenderInput` to override the client-level defaults for that one call.
 
 ## Error handling
 
@@ -247,7 +251,7 @@ use PoliPage\Exception\ConnectionException;
 use PoliPage\Exception\RateLimitException;
 
 try {
-    $pdf = $client->render->pdf(new ProjectModeInput(...));
+    $pdf = $client->render->pdf(new RenderInput(...));
 } catch (AuthenticationException $e) {
     return refreshCredentials();                 // 401 / 403
 } catch (RateLimitException $e) {
@@ -274,7 +278,7 @@ PoliPageException                      (base, extends \RuntimeException)
     ├── Exception\AuthenticationException    (401)
     ├── Exception\PermissionDeniedException  (403)
     ├── Exception\NotFoundException          (404)
-    ├── Exception\GoneException              (410 — document soft-deleted)
+    ├── Exception\GoneException              (410 — document deleted or expired)
     ├── Exception\RateLimitException         (429)
     └── Exception\InternalServerException    (5xx)
 ```
@@ -293,9 +297,9 @@ For lifecycle and billing failures, route the user to actionable messages rather
 
 ```php
 try {
-    $doc = $client->render->document(new ProjectModeInput(...));
+    $doc = $client->render->document(new RenderInput(...));
 } catch (PoliPageException $e) {
-    if ($e->errorCode === PoliPageException::PAYMENT_REQUIRED) {
+    if ($e->errorCode === PoliPageException::ORGANIZATION_PAYMENT_GRACE) {
         return showBanner('Subscription has unpaid invoices.');
     }
     if ($e->errorCode === PoliPageException::ORGANIZATION_CANCELLED) {
@@ -304,8 +308,8 @@ try {
     if ($e->errorCode === PoliPageException::DOCUMENT_NOT_FOUND) {
         return show404();
     }
-    if ($e->errorCode === PoliPageException::GONE) {
-        return show410();    // document was soft-deleted
+    if ($e->errorCode === PoliPageException::DOCUMENT_GONE) {
+        return show410();    // deleted, or a sandbox document past its 30 days
     }
     throw $e;
 }
@@ -318,7 +322,7 @@ try {
 PHP has no first-class cancellation primitive (no `AbortSignal`, no `context.Context`). The SDK exposes timeouts instead:
 
 - `timeout:` on the constructor — applied as the per-request deadline for every call.
-- `timeout:` on the input object (`ProjectModeInput` / `InlineModeInput`) — overrides the client default for that one call.
+- `timeout:` on the input object (`RenderInput`) — overrides the client default for that one call.
 
 PSR-18 does not standardise per-request timeouts, so the SDK forwards the value to the underlying client where possible (Guzzle, Symfony HTTP Client) and otherwise documents it as a best-effort hint. Configure connect / total timeouts on your injected PSR-18 client for guaranteed enforcement.
 
@@ -368,7 +372,7 @@ The SDK retries on **5xx**, **429**, **network errors**, and **timeouts**. Backo
 
 The SDK is fully type-annotated and tested at **PHPStan level max** with `phpstan-strict-rules`. Every public method has explicit parameter and return types; PHPDoc array shapes are provided wherever native PHP types are insufficient.
 
-`RenderInput` is a sealed-in-package abstract class with exactly two concrete subclasses — `ProjectModeInput` and `InlineModeInput`. The render methods type-hint the specific subclass they accept, so invalid combos (passing inline-mode HTML to `render->pdf`) fail at compile-time (PHPStan) and runtime (PHP `TypeError`).
+`RenderInput` is the single render input: `project`, `template` and `data`, plus optional `format`, `orientation`, `locale`, `metadata`, `idempotencyKey` and `timeout`. It has no `version` parameter, so passing one fails at compile-time (PHPStan) and at runtime (PHP rejects the unknown named argument).
 
 `final readonly class` is used throughout for input/output DTOs. Mutations require constructing a new instance — pair with PHP 8.4's `clone with` syntax if you need a one-field tweak.
 

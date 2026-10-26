@@ -1,8 +1,8 @@
 name: Integration
 
 on:
-  # Nightly sweep against the develop API to catch upstream drift before
-  # users do — the SDK retry / classifier code is wire-shape sensitive.
+  # Nightly sweep against the API to catch upstream drift before users
+  # do — the SDK retry / classifier code is wire-shape sensitive.
   schedule:
     - cron: "0 4 * * *"   # 04:00 UTC daily
   # Re-run on every push to main so a freshly-merged change can't break
@@ -25,12 +25,12 @@ jobs:
       matrix:
         php-version: ['8.3', '8.5']  # one near-floor + one near-ceiling
     env:
+      # A pp_sandbox_ key of an organization whose getting-started project
+      # is untouched: the suite renders getting-started/welcome.
       POLI_PAGE_API_KEY: ${{ secrets.POLI_PAGE_API_KEY }}
-      POLI_PAGE_BASE_URL: ${{ secrets.POLI_PAGE_BASE_URL || 'https://api-develop.poli.page' }}
-      # Optional: pin the template the integration suite renders against.
-      POLI_PAGE_TEST_PROJECT: ${{ secrets.POLI_PAGE_TEST_PROJECT }}
-      POLI_PAGE_TEST_TEMPLATE: ${{ secrets.POLI_PAGE_TEST_TEMPLATE }}
-      POLI_PAGE_TEST_VERSION: ${{ secrets.POLI_PAGE_TEST_VERSION }}
+      # Optional. Kept in a secret so no API host is named here; when it is
+      # unset the SDK default applies.
+      POLI_PAGE_BASE_URL: ${{ secrets.POLI_PAGE_BASE_URL }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -44,7 +44,7 @@ jobs:
         if: env.POLI_PAGE_API_KEY == ''
         run: |
           echo "POLI_PAGE_API_KEY secret is not set on this runner — skipping integration suite."
-          echo "Configure repository secrets > POLI_PAGE_API_KEY to enable nightly runs."
+          echo "Configure repository secrets > POLI_PAGE_API_KEY (a pp_sandbox_ key) to enable nightly runs."
           exit 0
 
       - name: Install dependencies

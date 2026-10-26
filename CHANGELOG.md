@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-26
+
 Environments: an API key belongs to one environment (`pp_sandbox_…`,
 `pp_live_…`, `pp_staging_…`) and a render uses the project's copy
 published in that environment. Breaking, with no deprecation window.
@@ -42,6 +44,14 @@ published in that environment. Breaking, with no deprecation window.
   name, returned verbatim.
 - `documents->delete($id)` is idempotent: the API answers `204` for an
   already-deleted document too.
+- The README, the docs site and `examples/demo.php` follow the
+  environments contract: a `sandbox` key renders `getting-started` /
+  `welcome` with no version, the README carries the key table, and
+  previews point to the playground at https://play.poli.page. The demo
+  checks a pasted key against the full-key regex, and its last step
+  renders an unknown template and prints the caught
+  `404 TEMPLATE_NOT_FOUND`. See `MIGRATION.md` for the upgrade from
+  0.9.x.
 
 ### Added
 
@@ -138,5 +148,6 @@ breaking changes may still land before 1.0.0.
   macOS and Windows for 8.5. `composer validate --strict`,
   `composer audit`, lint, static analysis, and unit tests all gated.
 
-[Unreleased]: https://github.com/poli-page/sdk-php/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/poli-page/sdk-php/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/poli-page/sdk-php/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/poli-page/sdk-php/releases/tag/v0.9.0

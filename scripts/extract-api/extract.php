@@ -47,6 +47,8 @@ if (!is_array($composer) || !isset($composer['name'])) {
 $packageName = (string) $composer['name'];
 $packageVersion = packageVersionFromConst();
 
+assertErrorCodesMatchSdk();
+
 // 1. Reset the reference output tree.
 rrmdir($referenceOut);
 mkdir($referenceOut . '/methods', 0o755, recursive: true);
@@ -73,6 +75,17 @@ fwrite(STDOUT, "extractor: wrote {$referenceOut}\n");
 // ---------------------------------------------------------------------------
 
 /**
+ * @return list<string>
+ */
+function renderErrorCodes(): array
+{
+    return [
+        'VALIDATION_ERROR', 'PROJECT_NOT_FOUND', 'PROJECT_NOT_IN_ENVIRONMENT', 'TEMPLATE_NOT_FOUND',
+        'TEMPLATE_ERROR', 'QUOTA_EXCEEDED', 'PUBLISH_IN_PROGRESS', 'timeout', 'network_error', 'INTERNAL_ERROR',
+    ];
+}
+
+/**
  * @return list<array{
  *     slug: string,
  *     displayName: string,
@@ -92,7 +105,7 @@ function methodTargets(): array
             'class' => \PoliPage\Render::class,
             'method' => 'pdf',
             'example' => 'render-pdf.php',
-            'errorCodes' => ['VALIDATION_ERROR', 'NOT_FOUND', 'QUOTA_EXCEEDED', 'timeout', 'network_error', 'INTERNAL_ERROR'],
+            'errorCodes' => renderErrorCodes(),
         ],
         [
             'slug' => 'render-pdf-stream',
@@ -100,7 +113,7 @@ function methodTargets(): array
             'class' => \PoliPage\Render::class,
             'method' => 'pdfStream',
             'example' => 'render-pdf-stream.php',
-            'errorCodes' => ['VALIDATION_ERROR', 'NOT_FOUND', 'QUOTA_EXCEEDED', 'timeout', 'network_error', 'INTERNAL_ERROR'],
+            'errorCodes' => renderErrorCodes(),
         ],
         [
             'slug' => 'render-document',
@@ -108,15 +121,7 @@ function methodTargets(): array
             'class' => \PoliPage\Render::class,
             'method' => 'document',
             'example' => 'render-document.php',
-            'errorCodes' => ['VALIDATION_ERROR', 'NOT_FOUND', 'QUOTA_EXCEEDED', 'INTERNAL_ERROR'],
-        ],
-        [
-            'slug' => 'render-preview',
-            'displayName' => 'render->preview',
-            'class' => \PoliPage\Render::class,
-            'method' => 'preview',
-            'example' => 'render-preview.php',
-            'errorCodes' => ['VALIDATION_ERROR', 'NOT_FOUND', 'QUOTA_EXCEEDED', 'INTERNAL_ERROR'],
+            'errorCodes' => renderErrorCodes(),
         ],
         [
             'slug' => 'documents-get',
@@ -124,7 +129,7 @@ function methodTargets(): array
             'class' => \PoliPage\Documents::class,
             'method' => 'get',
             'example' => 'documents-get.php',
-            'errorCodes' => ['DOCUMENT_NOT_FOUND', 'INVALID_API_KEY', 'GONE', 'INTERNAL_ERROR'],
+            'errorCodes' => ['DOCUMENT_NOT_FOUND', 'DOCUMENT_GONE', 'FORBIDDEN', 'INVALID_API_KEY', 'INTERNAL_ERROR'],
         ],
         [
             'slug' => 'documents-preview',
@@ -132,7 +137,7 @@ function methodTargets(): array
             'class' => \PoliPage\Documents::class,
             'method' => 'preview',
             'example' => 'documents-preview.php',
-            'errorCodes' => ['DOCUMENT_NOT_FOUND', 'INVALID_API_KEY', 'INTERNAL_ERROR'],
+            'errorCodes' => ['DOCUMENT_NOT_FOUND', 'DOCUMENT_GONE', 'FORBIDDEN', 'INVALID_API_KEY', 'INTERNAL_ERROR'],
         ],
         [
             'slug' => 'documents-thumbnails',
@@ -140,7 +145,7 @@ function methodTargets(): array
             'class' => \PoliPage\Documents::class,
             'method' => 'thumbnails',
             'example' => 'documents-thumbnails.php',
-            'errorCodes' => ['DOCUMENT_NOT_FOUND', 'VALIDATION_ERROR', 'INVALID_API_KEY', 'INTERNAL_ERROR'],
+            'errorCodes' => ['DOCUMENT_NOT_FOUND', 'DOCUMENT_GONE', 'VALIDATION_ERROR', 'THUMBNAILS_NOT_AVAILABLE', 'INVALID_API_KEY', 'INTERNAL_ERROR'],
         ],
         [
             'slug' => 'documents-delete',
@@ -148,7 +153,7 @@ function methodTargets(): array
             'class' => \PoliPage\Documents::class,
             'method' => 'delete',
             'example' => 'documents-delete.php',
-            'errorCodes' => ['DOCUMENT_NOT_FOUND', 'INVALID_API_KEY', 'INTERNAL_ERROR'],
+            'errorCodes' => ['DOCUMENT_NOT_FOUND', 'FORBIDDEN', 'ENVIRONMENT_PROTECTED', 'INVALID_API_KEY', 'INTERNAL_ERROR'],
         ],
         [
             'slug' => 'render-to-file',
@@ -157,7 +162,7 @@ function methodTargets(): array
             'method' => null,
             'function' => 'PoliPage\\renderToFile',
             'example' => 'render-to-file.php',
-            'errorCodes' => ['VALIDATION_ERROR', 'NOT_FOUND', 'QUOTA_EXCEEDED', 'timeout', 'network_error', 'invalid_options'],
+            'errorCodes' => [...renderErrorCodes(), 'invalid_options'],
         ],
     ];
 }
@@ -305,9 +310,6 @@ function buildTypesPage(): string
         \PoliPage\Render::class,
         \PoliPage\Documents::class,
         \PoliPage\RenderInput::class,
-        \PoliPage\ProjectModeInput::class,
-        \PoliPage\InlineModeInput::class,
-        \PoliPage\PreviewResult::class,
         \PoliPage\DocumentDescriptor::class,
         \PoliPage\DocumentPreviewResult::class,
         \PoliPage\Thumbnail::class,
@@ -337,7 +339,7 @@ The PHP SDK exposes the types below. Import any of them with `use`:
 
 ```php
 use PoliPage\\PoliPage;
-use PoliPage\\ProjectModeInput;
+use PoliPage\\RenderInput;
 use PoliPage\\DocumentDescriptor;
 ```
 
@@ -348,53 +350,111 @@ For the full set of fields on each class and the `PoliPage\\Exception\\*` hierar
 MDX;
 }
 
-function buildErrorsPage(): string
+/**
+ * SDK-internal codes: raised before any HTTP call, on a transport failure,
+ * or on an unexpected response shape.
+ *
+ * @return list<array{code: string, when: string}>
+ */
+function sdkInternalErrors(): array
 {
-    $sdkInternal = [
-        ['code' => 'invalid_options', 'when' => 'Constructor arguments are missing or malformed.'],
+    return [
+        ['code' => 'invalid_options', 'when' => 'Constructor or method arguments are missing or malformed.'],
         ['code' => 'network_error',   'when' => 'TCP/TLS-level failure reaching the API. Retryable.'],
         ['code' => 'timeout',         'when' => 'The request did not complete within `timeout`. Retryable.'],
         ['code' => 'aborted',         'when' => 'Caller-driven cancellation. Not retryable.'],
         ['code' => 'unknown_error',   'when' => 'A catch-all for unexpected failures.'],
         ['code' => 'DOWNLOAD_FAILED', 'when' => 'The presigned PDF URL returned a non-2xx response.'],
-        ['code' => 'INTERNAL_ERROR',  'when' => 'The API or SDK reached an unexpected state.'],
+        ['code' => 'INTERNAL_ERROR',  'when' => 'The API answered 5xx, or its response had an unexpected shape. Retryable on 5xx.'],
     ];
+}
 
-    $apiAuth = [
-        ['code' => 'MISSING_API_KEY', 'when' => 'No API key in the request.'],
-        ['code' => 'INVALID_API_KEY', 'when' => 'The API key is malformed or revoked.'],
+/**
+ * Known API codes, grouped as on the errors page. Together with
+ * sdkInternalErrors() they must cover every PoliPageException constant;
+ * assertErrorCodesMatchSdk() fails the build when they drift.
+ *
+ * @return array<string, list<array{code: string, when: string}>>
+ */
+function apiErrorGroups(): array
+{
+    return [
+        'Authentication' => [
+            ['code' => 'MISSING_API_KEY', 'when' => 'No API key in the request.'],
+            ['code' => 'INVALID_API_KEY', 'when' => 'The API key is malformed or revoked.'],
+        ],
+        'Organization state and permissions' => [
+            ['code' => 'ORGANIZATION_PAYMENT_GRACE', 'when' => 'The organization is in payment grace: read-only, writes are refused.'],
+            ['code' => 'ORGANIZATION_CANCELLED',     'when' => 'The organization has been cancelled: read-only until purge.'],
+            ['code' => 'ORGANIZATION_PURGED',        'when' => 'The organization has been purged.'],
+            ['code' => 'ORGANIZATION_MIGRATING',     'when' => 'The organization\'s storage is being migrated. Retryable.'],
+            ['code' => 'FORBIDDEN',                  'when' => 'A document of another organization, or of another environment than the key\'s.'],
+            ['code' => 'ENVIRONMENT_PROTECTED',      'when' => '`documents->delete` in a protected environment without the owner or admin role.'],
+            ['code' => 'THUMBNAILS_NOT_AVAILABLE',   'when' => '`documents->thumbnails` on a tier without thumbnails.'],
+        ],
+        'Not found' => [
+            ['code' => 'NOT_FOUND',                  'when' => 'Generic not found, e.g. an unknown route.'],
+            ['code' => 'PROJECT_NOT_FOUND',          'when' => 'No project with this slug in the organization.'],
+            ['code' => 'PROJECT_NOT_IN_ENVIRONMENT', 'when' => 'The project is not published in the key\'s environment, or was removed from it.'],
+            ['code' => 'TEMPLATE_NOT_FOUND',         'when' => 'The template is absent from the project\'s copy in the key\'s environment.'],
+            ['code' => 'DOCUMENT_NOT_FOUND',         'when' => 'No stored document matches the supplied id.'],
+            ['code' => 'DOCUMENT_GONE',              'when' => 'The document was deleted, or is a `sandbox` document older than 30 days.'],
+        ],
+        'Validation' => [
+            ['code' => 'VALIDATION_ERROR',              'when' => 'The request body failed validation, e.g. an unknown field or an out-of-range option.'],
+            ['code' => 'MISSING_DATA',                  'when' => 'The request body lacks the required `data` field.'],
+            ['code' => 'MISSING_TEMPLATE_SLUG',         'when' => 'The template slug is missing.'],
+            ['code' => 'PROJECT_REQUIRED_FOR_DOCUMENT', 'when' => 'A render was called with an empty `project`.'],
+            ['code' => 'TEMPLATE_ERROR',                'when' => 'The engine rejected the template or its data.'],
+            ['code' => 'EMPTY_DOCUMENT',                'when' => 'The render produced zero pages.'],
+            ['code' => 'ENVIRONMENT_MISMATCH',          'when' => 'The request named another environment than the key\'s. The SDK never sends one.'],
+            ['code' => 'RENDER_BODY_TOO_LARGE',         'when' => 'The request body is over the API\'s size limit.'],
+            ['code' => 'DOCUMENT_TOO_LARGE',            'when' => 'The document exceeds an engine limit.'],
+        ],
+        'Rate and quota' => [
+            ['code' => 'RATE_LIMIT_EXCEEDED',  'when' => 'Too many requests for this key. Retryable.'],
+            ['code' => 'QUOTA_EXCEEDED',       'when' => 'The organization\'s monthly quota is reached. Retryable.'],
+            ['code' => 'OVERAGE_CAP_EXCEEDED', 'when' => 'The overage cap is reached. Retryable.'],
+        ],
+        'Server' => [
+            ['code' => 'STORAGE_ACCESS_DENIED', 'when' => 'The organization\'s own storage bucket refuses access. Retryable.'],
+            ['code' => 'PUBLISH_IN_PROGRESS',   'when' => 'The project is being published into this environment; honours `Retry-After`. Retryable.'],
+            ['code' => 'RENDER_TIMEOUT',        'when' => 'The engine\'s time budget expired. Retryable.'],
+        ],
     ];
+}
 
-    $apiBilling = [
-        ['code' => 'PAYMENT_REQUIRED',       'when' => 'Organization billing is past due.'],
-        ['code' => 'FORBIDDEN',              'when' => 'The key does not have access to the requested resource.'],
-        ['code' => 'ORGANIZATION_CANCELLED', 'when' => 'The organization has been cancelled.'],
-        ['code' => 'ORGANIZATION_PURGED',    'when' => 'The organization has been purged.'],
-    ];
+/**
+ * @return list<string>
+ */
+function documentedErrorCodes(): array
+{
+    $codes = array_column(sdkInternalErrors(), 'code');
+    foreach (apiErrorGroups() as $rows) {
+        array_push($codes, ...array_column($rows, 'code'));
+    }
 
-    $apiNotFound = [
-        ['code' => 'NOT_FOUND',          'when' => 'The project/template slug does not exist or is not published.'],
-        ['code' => 'VERSION_NOT_FOUND',  'when' => 'The pinned version does not exist for this template.'],
-        ['code' => 'DOCUMENT_NOT_FOUND', 'when' => 'No stored document matches the supplied id.'],
-        ['code' => 'GONE',               'when' => 'The resource existed but has been deleted.'],
-    ];
+    return $codes;
+}
 
-    $apiValidation = [
-        ['code' => 'VALIDATION_ERROR',            'when' => '`data` does not satisfy the template schema.'],
-        ['code' => 'MISSING_DATA',                'when' => 'Request body lacks the required `data` field.'],
-        ['code' => 'MISSING_PROJECT_OR_TEMPLATE', 'when' => 'Project mode call without both `project` and `template`.'],
-        ['code' => 'MISSING_TEMPLATE_SLUG',       'when' => 'Template slug is missing.'],
-        ['code' => 'PROJECT_REQUIRED_FOR_DOCUMENT', 'when' => 'Document-producing call missing `project`.'],
-        ['code' => 'INVALID_VERSION_FORMAT',      'when' => 'The `version` string is not a valid semver.'],
-        ['code' => 'VERSION_REQUIRED',            'when' => 'Live keys require a pinned `version`.'],
-        ['code' => 'INVALID_VERSION_FOR_KEY_ENV', 'when' => 'Sandbox key targeting a live-only version, or vice versa.'],
-    ];
+function assertErrorCodesMatchSdk(): void
+{
+    $documented = documentedErrorCodes();
+    $declared = array_values(array_unique(array_filter(
+        (new ReflectionClass(\PoliPage\PoliPageException::class))->getConstants(),
+        is_string(...),
+    )));
+    $missing = array_diff($declared, $documented);
+    $unknown = array_diff($documented, $declared);
+    if ($missing !== [] || $unknown !== [] || count($documented) !== count(array_unique($documented))) {
+        fwrite(STDERR, 'extractor: error codes out of sync with PoliPageException'
+            . ' (undocumented: ' . implode(', ', $missing) . '; not in the SDK: ' . implode(', ', $unknown) . ")\n");
+        exit(1);
+    }
+}
 
-    $apiRate = [
-        ['code' => 'QUOTA_EXCEEDED',      'when' => 'Per-key rate limit or monthly quota reached. Retryable.'],
-        ['code' => 'OVERAGE_CAP_EXCEEDED', 'when' => 'Hard overage cap reached. Not retryable.'],
-    ];
-
+function buildErrorsPage(): string
+{
     $exceptionMap = [
         ['class' => 'PoliPage\\PoliPageException',                 'extends' => 'RuntimeException',     'when' => 'Base type for every SDK failure.'],
         ['class' => 'PoliPage\\Exception\\ApiStatusException',     'extends' => 'PoliPageException',    'when' => 'Any non-2xx HTTP response. `$status` is non-null.'],
@@ -410,6 +470,10 @@ function buildErrorsPage(): string
     ];
 
     $j = static fn (array $rows): string => json_encode($rows, JSON_UNESCAPED_SLASHES);
+    $apiSections = '';
+    foreach (apiErrorGroups() as $heading => $rows) {
+        $apiSections .= "## {$heading}\n\n<ErrorTable errors={{$j($rows)}} />\n\n";
+    }
 
     return <<<MDX
 ---
@@ -423,28 +487,9 @@ Every failure thrown by the SDK is an instance of `PoliPage\\PoliPageException` 
 
 ## SDK-internal
 
-<ErrorTable errors={{$j($sdkInternal)}} />
+<ErrorTable errors={{$j(sdkInternalErrors())}} />
 
-## Authentication
-
-<ErrorTable errors={{$j($apiAuth)}} />
-
-## Billing and lifecycle
-
-<ErrorTable errors={{$j($apiBilling)}} />
-
-## Not found
-
-<ErrorTable errors={{$j($apiNotFound)}} />
-
-## Validation
-
-<ErrorTable errors={{$j($apiValidation)}} />
-
-## Rate and quota
-
-<ErrorTable errors={{$j($apiRate)}} />
-
+{$apiSections}
 ## Exception classes
 
 | Class | Extends | When |
@@ -509,18 +554,6 @@ function buildMetaSidecar(string $packageName, string $packageVersion): array
         $methods[] = ['slug' => $t['slug'], 'name' => $t['displayName']];
     }
 
-    $errorCodes = [
-        'invalid_options', 'network_error', 'timeout', 'aborted', 'unknown_error',
-        'DOWNLOAD_FAILED', 'INTERNAL_ERROR',
-        'MISSING_API_KEY', 'INVALID_API_KEY',
-        'PAYMENT_REQUIRED', 'FORBIDDEN', 'ORGANIZATION_CANCELLED', 'ORGANIZATION_PURGED',
-        'NOT_FOUND', 'VERSION_NOT_FOUND', 'DOCUMENT_NOT_FOUND', 'GONE',
-        'VALIDATION_ERROR', 'MISSING_DATA', 'MISSING_PROJECT_OR_TEMPLATE',
-        'MISSING_TEMPLATE_SLUG', 'PROJECT_REQUIRED_FOR_DOCUMENT',
-        'INVALID_VERSION_FORMAT', 'VERSION_REQUIRED', 'INVALID_VERSION_FOR_KEY_ENV',
-        'QUOTA_EXCEEDED', 'OVERAGE_CAP_EXCEEDED',
-    ];
-
     return [
         'language' => 'php',
         'package' => ['kind' => 'composer', 'name' => $packageName, 'version' => $packageVersion],
@@ -530,7 +563,7 @@ function buildMetaSidecar(string $packageName, string $packageVersion): array
         'methods' => $methods,
         'errors' => array_map(
             static fn (string $code): array => ['code' => $code],
-            $errorCodes,
+            documentedErrorCodes(),
         ),
     ];
 }
