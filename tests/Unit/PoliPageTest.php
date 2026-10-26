@@ -244,7 +244,8 @@ final class PoliPageTest extends TestCase
         self::assertCount(1, $events);
         self::assertSame(1000.0, $events[0]->delayMs);
         self::assertSame(PoliPageException::PUBLISH_IN_PROGRESS, $events[0]->reason->errorCode);
-        self::assertGreaterThanOrEqual(1.0, microtime(true) - $started);
+        // Why: Windows timers measured 0.99993 s around the 1 s usleep; 0.9 still proves the client slept.
+        self::assertGreaterThanOrEqual(0.9, microtime(true) - $started);
     }
 
     public function testThumbnailsWithoutOptionsSendsAnEmptyJsonObject(): void

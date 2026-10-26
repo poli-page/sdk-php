@@ -20,7 +20,7 @@ declare(strict_types=1);
 require __DIR__ . '/../vendor/autoload.php';
 require __DIR__ . '/_shared.php';
 
-use PoliPage\Exception\BadRequestException;
+use PoliPage\Exception\NotFoundException;
 use PoliPage\PoliPage;
 use PoliPage\PoliPageException;
 use PoliPage\RenderInput;
@@ -178,22 +178,22 @@ $client->documents->delete($doc->documentId);
 echo '  ' . green('✔') . ' deleted ' . $doc->documentId . "\n";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 9. Error handling — DELIBERATELY trigger a 400 INVALID_VERSION_FORMAT
+// 9. Error handling — DELIBERATELY trigger a 404 TEMPLATE_NOT_FOUND
 // ─────────────────────────────────────────────────────────────────────────────
 step(9, TOTAL_STEPS, 'error handling — DEMO ONLY (we trigger an error on purpose)');
 echo yellow('  ⚠  This step is intentional — the SDK is about to throw, but the') . "\n";
 echo yellow('     demo will catch and inspect it. ') . bold('The demo is NOT crashing.') . "\n";
-echo dim('     (We send an invalid version string, expecting 400 INVALID_VERSION_FORMAT.)') . "\n\n";
+echo dim('     (We ask for a template that does not exist, expecting 404 TEMPLATE_NOT_FOUND.)') . "\n\n";
 
 try {
     $client->render->pdf(new RenderInput(
         project: 'getting-started',
-        template: 'welcome',
+        template: 'does-not-exist', // intentionally unknown
         data: [],
     ));
     echo '  ' . red('✗ unexpected: the call succeeded but should have failed') . "\n";
-} catch (BadRequestException $e) {
-    echo '  ' . green('✔') . " Caught BadRequestException — PoliPageException exposes:\n";
+} catch (NotFoundException $e) {
+    echo '  ' . green('✔') . " Caught NotFoundException — PoliPageException exposes:\n";
     printf(
         "       errorCode:  %s\n       status:     %d\n       requestId:  %s\n",
         $e->errorCode,
