@@ -6,9 +6,9 @@ declare(strict_types=1);
  * poli-page/sdk — runnable end-to-end demo.
  *
  * Walks through every public method of the SDK and writes the artefacts to
- * `examples/output/`. Uses the `getting-started/welcome/1.0.0` template
- * that's auto-provisioned in every Poli Page org, so this works out of the
- * box for any newcomer with a fresh API key.
+ * `examples/output/`. Uses the `getting-started` project's `welcome`
+ * template, published into every Poli Page org's `sandbox` environment, so
+ * this works out of the box for any newcomer with a fresh sandbox key.
  *
  * Run:  composer install && php examples/demo.php
  *
@@ -20,10 +20,10 @@ declare(strict_types=1);
 require __DIR__ . '/../vendor/autoload.php';
 require __DIR__ . '/_shared.php';
 
-use PoliPage\Exception\BadRequestException;
+use PoliPage\Exception\NotFoundException;
 use PoliPage\PoliPage;
 use PoliPage\PoliPageException;
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
 use PoliPage\ThumbnailOptions;
 
 use function PoliPage\Examples\bold;
@@ -39,7 +39,7 @@ use function PoliPage\Examples\yellow;
 use function PoliPage\renderToFile;
 
 const OUT_DIR = __DIR__ . '/output';
-const TOTAL_STEPS = 10;
+const TOTAL_STEPS = 9;
 
 if (!is_dir(OUT_DIR) && !mkdir(OUT_DIR, 0o755, true) && !is_dir(OUT_DIR)) {
     fwrite(\STDERR, "Failed to create output directory: " . OUT_DIR . "\n");
@@ -49,14 +49,11 @@ if (!is_dir(OUT_DIR) && !mkdir(OUT_DIR, 0o755, true) && !is_dir(OUT_DIR)) {
 $apiKey = ensureApiKey();
 $baseUrl = resolveBaseUrl();
 
-// Every render call uses project mode — `render->pdf`, `render->pdfStream`,
-// `render->document`, and `renderToFile` all require it. `render->preview`
-// also accepts inline-mode HTML; we use project mode here for parity with
-// the document-producing methods.
-$projectInput = new ProjectModeInput(
+// `render->pdf`, `render->pdfStream`, `render->document`, and `renderToFile`
+// all take the same input; the key's environment picks the published copy.
+$projectInput = new RenderInput(
     project: 'getting-started',
     template: 'welcome',
-    version: '1.0.0',
     data: ['name' => 'SDK Demo'],
 );
 
@@ -125,37 +122,26 @@ echo "  wrote {$filePath}\n";
 echo "  " . dim('open:') . ' ' . fileLink($filePath) . "\n";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. render->preview() — paginated HTML preview output
+// 4. render->document() — store the document, return the descriptor
 // ─────────────────────────────────────────────────────────────────────────────
-step(4, TOTAL_STEPS, 'render->preview() — paginated HTML preview');
-$preview = $client->render->preview($projectInput);
-$previewPath = OUT_DIR . '/render-preview.html';
-file_put_contents($previewPath, $preview->html);
-echo "  " . bold((string) $preview->totalPages) . ' page(s), '
-    . strlen($preview->html) . " chars (env: {$preview->environment})\n";
-echo "  " . dim('open:') . ' ' . fileLink($previewPath) . "\n";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. render->document() — store the document, return the descriptor
-// ─────────────────────────────────────────────────────────────────────────────
-step(5, TOTAL_STEPS, 'render->document() — store the document, return the descriptor');
+step(4, TOTAL_STEPS, 'render->document() — store the document, return the descriptor');
 $doc = $client->render->document($projectInput);
 echo '  ' . dim('documentId:') . ' ' . bold($doc->documentId) . "\n";
 echo '  ' . dim('pageCount:') . ' ' . $doc->pageCount
     . ', ' . dim('sizeBytes:') . ' ' . $doc->sizeBytes . "\n";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. documents->get(id) — re-fetch the descriptor with a fresh presigned URL
+// 5. documents->get(id) — re-fetch the descriptor with a fresh presigned URL
 // ─────────────────────────────────────────────────────────────────────────────
-step(6, TOTAL_STEPS, 'documents->get(id) — re-fetch with a fresh presigned URL');
+step(5, TOTAL_STEPS, 'documents->get(id) — re-fetch with a fresh presigned URL');
 $refetched = $client->documents->get($doc->documentId);
 echo '  ' . dim('environment:') . ' ' . $refetched->environment . "\n";
 echo '  ' . dim('expiresAt:') . ' ' . $refetched->expiresAt . "\n";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7. documents->thumbnails(id, opts) — generate page thumbnails (Starter+ tier)
+// 6. documents->thumbnails(id, opts) — generate page thumbnails (Starter+ tier)
 // ─────────────────────────────────────────────────────────────────────────────
-step(7, TOTAL_STEPS, 'documents->thumbnails(id) — page thumbnails (Starter+ tier)');
+step(6, TOTAL_STEPS, 'documents->thumbnails(id) — page thumbnails (Starter+ tier)');
 try {
     $thumbs = $client->documents->thumbnails(
         $doc->documentId,
@@ -174,9 +160,9 @@ try {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 8. documents->preview(id) — stored document HTML, no engine work
+// 7. documents->preview(id) — stored document HTML, no engine work
 // ─────────────────────────────────────────────────────────────────────────────
-step(8, TOTAL_STEPS, 'documents->preview(id) — stored HTML, no engine work');
+step(7, TOTAL_STEPS, 'documents->preview(id) — stored HTML, no engine work');
 $docPreview = $client->documents->preview($doc->documentId);
 $docPreviewPath = OUT_DIR . '/document-preview.html';
 file_put_contents($docPreviewPath, $docPreview->html);
@@ -185,30 +171,29 @@ echo '  ' . bold((string) $docPreview->pageCount) . ' page(s), '
 echo "  " . dim('open:') . ' ' . fileLink($docPreviewPath) . "\n";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 9. documents->delete(id) — soft-delete; the PDF is purged, metadata kept
+// 8. documents->delete(id) — soft-delete; the PDF is purged, metadata kept
 // ─────────────────────────────────────────────────────────────────────────────
-step(9, TOTAL_STEPS, 'documents->delete(id) — soft-delete the document');
+step(8, TOTAL_STEPS, 'documents->delete(id) — soft-delete the document');
 $client->documents->delete($doc->documentId);
 echo '  ' . green('✔') . ' deleted ' . $doc->documentId . "\n";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 10. Error handling — DELIBERATELY trigger a 400 INVALID_VERSION_FORMAT
+// 9. Error handling — DELIBERATELY trigger a 404 TEMPLATE_NOT_FOUND
 // ─────────────────────────────────────────────────────────────────────────────
-step(10, TOTAL_STEPS, 'error handling — DEMO ONLY (we trigger an error on purpose)');
+step(9, TOTAL_STEPS, 'error handling — DEMO ONLY (we trigger an error on purpose)');
 echo yellow('  ⚠  This step is intentional — the SDK is about to throw, but the') . "\n";
 echo yellow('     demo will catch and inspect it. ') . bold('The demo is NOT crashing.') . "\n";
-echo dim('     (We send an invalid version string, expecting 400 INVALID_VERSION_FORMAT.)') . "\n\n";
+echo dim('     (We ask for a template that does not exist, expecting 404 TEMPLATE_NOT_FOUND.)') . "\n\n";
 
 try {
-    $client->render->pdf(new ProjectModeInput(
+    $client->render->pdf(new RenderInput(
         project: 'getting-started',
-        template: 'welcome',
-        version: 'banana', // intentionally invalid
+        template: 'does-not-exist', // intentionally unknown
         data: [],
     ));
     echo '  ' . red('✗ unexpected: the call succeeded but should have failed') . "\n";
-} catch (BadRequestException $e) {
-    echo '  ' . green('✔') . " Caught BadRequestException — PoliPageException exposes:\n";
+} catch (NotFoundException $e) {
+    echo '  ' . green('✔') . " Caught NotFoundException — PoliPageException exposes:\n";
     printf(
         "       errorCode:  %s\n       status:     %d\n       requestId:  %s\n",
         $e->errorCode,

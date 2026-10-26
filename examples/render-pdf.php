@@ -5,11 +5,11 @@ declare(strict_types=1);
 require __DIR__ . '/../vendor/autoload.php';
 
 use PoliPage\PoliPage;
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
 
 $client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
 
-$pdf = $client->render->pdf(new ProjectModeInput(
+$pdf = $client->render->pdf(new RenderInput(
     project: 'billing',
     template: 'invoice',
     data: ['invoiceNumber' => 'INV-001', 'total' => 1280],

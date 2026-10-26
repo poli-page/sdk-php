@@ -25,7 +25,6 @@ final class DocumentDescriptorTest extends TestCase
         self::assertSame('billing', $descriptor->projectSlug);
         self::assertSame('tmpl_1', $descriptor->templateId);
         self::assertSame('invoice', $descriptor->templateSlug);
-        self::assertSame('1.0.0', $descriptor->version);
         self::assertSame('sandbox', $descriptor->environment);
         self::assertSame('key_42', $descriptor->apiKeyId);
         self::assertSame('A4', $descriptor->format);
@@ -46,7 +45,6 @@ final class DocumentDescriptorTest extends TestCase
         $payload['projectSlug'] = null;
         $payload['templateId'] = null;
         $payload['templateSlug'] = null;
-        $payload['version'] = null;
         $payload['apiKeyId'] = null;
         $payload['orientation'] = null;
         $payload['locale'] = null;
@@ -57,10 +55,24 @@ final class DocumentDescriptorTest extends TestCase
         self::assertNull($descriptor->projectSlug);
         self::assertNull($descriptor->templateId);
         self::assertNull($descriptor->templateSlug);
-        self::assertNull($descriptor->version);
         self::assertNull($descriptor->apiKeyId);
         self::assertNull($descriptor->orientation);
         self::assertNull($descriptor->locale);
+    }
+
+    public function testEnvironmentIsReturnedVerbatimForAnyEnvironmentName(): void
+    {
+        $payload = self::wirePayload();
+        $payload['environment'] = 'staging';
+
+        $descriptor = DocumentDescriptor::fromWire($payload, new FakeTransport());
+
+        self::assertSame('staging', $descriptor->environment);
+    }
+
+    public function testHasNoVersionField(): void
+    {
+        self::assertFalse(property_exists(DocumentDescriptor::class, 'version'));
     }
 
     public function testFromWireDefaultsEmptyMetadataToEmptyRenderMetadata(): void
@@ -127,7 +139,6 @@ final class DocumentDescriptorTest extends TestCase
             'projectSlug' => 'billing',
             'templateId' => 'tmpl_1',
             'templateSlug' => 'invoice',
-            'version' => '1.0.0',
             'environment' => 'sandbox',
             'apiKeyId' => 'key_42',
             'format' => 'A4',

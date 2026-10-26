@@ -9,8 +9,12 @@ use PoliPage\Internal\Transport;
 /**
  * Stored document returned by `$client->render->document(...)`. Mirrors the
  * deployed API's wire shape one-to-one. Nullable wire fields (project ids,
- * template ids, version, etc.) map to `?string`; metadata is always
- * non-null (the server echoes `{}` when the caller omits it).
+ * template ids, etc.) map to `?string`; metadata is always non-null (the
+ * server echoes `{}` when the caller omits it).
+ *
+ * `environment` is the name of the environment the rendering key belongs
+ * to (`sandbox`, `live`, or any environment the organization created, such
+ * as `staging`), returned verbatim.
  *
  * `downloadPdf()` fetches the PDF bytes from `presignedPdfUrl` on demand
  * using the SDK's PSR-18 client (so injected TLS / proxy / mock layers
@@ -30,7 +34,6 @@ final readonly class DocumentDescriptor
         public ?string $projectSlug,
         public ?string $templateId,
         public ?string $templateSlug,
-        public ?string $version,
         public string $environment,
         public ?string $apiKeyId,
         public string $format,
@@ -82,7 +85,6 @@ final readonly class DocumentDescriptor
             projectSlug: self::nullableStringField($raw, 'projectSlug'),
             templateId: self::nullableStringField($raw, 'templateId'),
             templateSlug: self::nullableStringField($raw, 'templateSlug'),
-            version: self::nullableStringField($raw, 'version'),
             environment: self::stringField($raw, 'environment'),
             apiKeyId: self::nullableStringField($raw, 'apiKeyId'),
             format: self::stringField($raw, 'format'),

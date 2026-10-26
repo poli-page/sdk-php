@@ -7,6 +7,7 @@ namespace PoliPage\Tests\Unit\Documents;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use PoliPage\Documents;
+use PoliPage\Tests\Support\DocumentWire;
 use PoliPage\Tests\Support\FakeTransport;
 
 #[CoversClass(Documents::class)]
@@ -15,7 +16,7 @@ final class GetTest extends TestCase
     public function testGetsDocumentByIdAndReturnsDescriptor(): void
     {
         $transport = new FakeTransport();
-        $transport->getResponse = self::wirePayload('doc_abc');
+        $transport->getResponse = DocumentWire::descriptor();
         $documents = new Documents($transport);
 
         $descriptor = $documents->get('doc_abc');
@@ -29,7 +30,7 @@ final class GetTest extends TestCase
     public function testIdIsRawurlencodedInThePath(): void
     {
         $transport = new FakeTransport();
-        $transport->getResponse = self::wirePayload('doc/with slash');
+        $transport->getResponse = DocumentWire::descriptor(['documentId' => 'doc/with slash']);
         $documents = new Documents($transport);
 
         $documents->get('doc/with slash');
@@ -43,7 +44,9 @@ final class GetTest extends TestCase
     public function testReturnedDescriptorDownloadsThroughTheSameTransport(): void
     {
         $transport = new FakeTransport();
-        $transport->getResponse = self::wirePayload('doc_abc');
+        $transport->getResponse = DocumentWire::descriptor([
+            'presignedPdfUrl' => 'https://s3.example.com/doc_abc.pdf?sig=fresh',
+        ]);
         $transport->fetchBytesResponse = 'fresh-pdf-bytes';
         $documents = new Documents($transport);
 
@@ -55,32 +58,5 @@ final class GetTest extends TestCase
             'https://s3.example.com/doc_abc.pdf?sig=fresh',
             $transport->fetchBytesCalls[0]['url'],
         );
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function wirePayload(string $id): array
-    {
-        return [
-            'documentId' => $id,
-            'organizationId' => 'org_xyz',
-            'projectId' => null,
-            'projectSlug' => 'billing',
-            'templateId' => null,
-            'templateSlug' => 'invoice',
-            'version' => '1.0.0',
-            'environment' => 'sandbox',
-            'apiKeyId' => null,
-            'format' => 'A4',
-            'orientation' => null,
-            'locale' => null,
-            'pageCount' => 1,
-            'sizeBytes' => 256,
-            'createdAt' => '2026-05-21T12:00:00Z',
-            'metadata' => [],
-            'presignedPdfUrl' => 'https://s3.example.com/' . $id . '.pdf?sig=fresh',
-            'expiresAt' => '2026-05-21T12:15:00Z',
-        ];
     }
 }

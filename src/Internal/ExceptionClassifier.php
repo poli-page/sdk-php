@@ -23,7 +23,7 @@ use PoliPage\PoliPageException;
  * naturally, matching stripe-php / openai-php / aws-sdk-php convention.
  *
  * 5xx statuses map to {@see InternalServerException}; uncategorised 4xx
- * statuses (402, 405, 422, …) fall through to the generic
+ * statuses (405, 409, 413, …) fall through to the generic
  * {@see ApiStatusException} base. Transport failures use the dedicated
  * factories {@see networkError()} / {@see timeout()}.
  *

@@ -126,8 +126,8 @@ function resolveBaseUrl(): string
 /**
  * Resolve POLI_PAGE_API_KEY: env > .env > interactive prompt.
  * On a successful prompt the pasted key is appended to `.env` so the
- * next run is silent. Exits the process with a friendly error if the
- * pasted value does not look like a test key.
+ * next run is silent. Exits the process with a friendly error if nothing
+ * was pasted.
  */
 function ensureApiKey(): string
 {
@@ -148,9 +148,9 @@ function ensureApiKey(): string
     echo $rule . "\n";
     echo bold(yellow('   No POLI_PAGE_API_KEY found.')) . "\n";
     echo $rule . "\n\n";
-    echo "   This demo needs a test key (" . cyan('pp_test_*') . ") to\n";
-    echo "   talk to the Poli Page API. Test keys never bill or send real\n";
-    echo "   documents.\n\n";
+    echo "   This demo needs a sandbox key (" . cyan('pp_sandbox_*') . ") to\n";
+    echo "   talk to the Poli Page API. Sandbox renders are watermarked and\n";
+    echo "   never count toward your quota.\n\n";
     echo bold("   How to get one:") . "\n";
     echo "     1. Sign in at " . cyan('https://app.poli.page') . "\n";
     echo "     2. Go to your organization's API keys page:\n";
@@ -158,12 +158,12 @@ function ensureApiKey(): string
     echo dim("        (replace {YOUR_ORG} with your org slug — visible in the") . "\n";
     echo dim("         dashboard URL when you're inside your organization)") . "\n";
     echo "     3. Click \"Create key\" and copy\n";
-    echo "        the value (starts with " . cyan('pp_test_') . ").\n\n";
+    echo "        the value (starts with " . cyan('pp_sandbox_') . ").\n\n";
     echo "   Paste it below — we'll save it to " . cyan('.env') . " (repo root) so\n";
     echo "   future runs pick it up automatically. (You can also set\n";
     echo '   ' . dim('POLI_PAGE_API_KEY') . " in your shell — that wins over the file.)\n\n";
 
-    echo bold('   Paste your pp_test_* key') . ' (or Ctrl-C to cancel): ';
+    echo bold('   Paste your pp_sandbox_* key') . ' (or Ctrl-C to cancel): ';
     $line = fgets(\STDIN);
     if ($line === false) {
         echo "\n  " . red('✗') . " stdin closed before a key was provided. Aborting.\n";
@@ -171,8 +171,8 @@ function ensureApiKey(): string
     }
     $key = trim($line);
 
-    if (!str_starts_with($key, 'pp_test_')) {
-        echo "\n  " . red('✗') . " Expected a key starting with `pp_test_`. Aborting.\n";
+    if ($key === '') {
+        echo "\n  " . red('✗') . " No key pasted. Aborting.\n";
         exit(1);
     }
 

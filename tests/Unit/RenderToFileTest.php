@@ -9,9 +9,11 @@ use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPUnit\Framework\Attributes\CoversFunction;
 use PHPUnit\Framework\TestCase;
 use PoliPage\PoliPage;
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
 
 use function PoliPage\renderToFile;
+
+use PoliPage\Tests\Support\DocumentWire;
 
 #[CoversFunction('PoliPage\renderToFile')]
 final class RenderToFileTest extends TestCase
@@ -36,7 +38,7 @@ final class RenderToFileTest extends TestCase
         $mock = new MockClient();
         $mock->addResponse(
             $factory->createResponse(200)->withBody(
-                $factory->createStream(json_encode(self::descriptorWire(), flags: JSON_THROW_ON_ERROR)),
+                $factory->createStream(DocumentWire::descriptorJson()),
             ),
         );
         $mock->addResponse(
@@ -45,13 +47,13 @@ final class RenderToFileTest extends TestCase
             ),
         );
         $client = new PoliPage(
-            apiKey: 'pp_test_x',
+            apiKey: 'pp_sandbox_x',
             httpClient: $mock,
             requestFactory: $factory,
             streamFactory: $factory,
         );
 
-        renderToFile($client, new ProjectModeInput(
+        renderToFile($client, new RenderInput(
             project: 'billing',
             template: 'invoice',
             data: ['n' => 1],
@@ -73,7 +75,7 @@ final class RenderToFileTest extends TestCase
         $mock = new MockClient();
         $mock->addResponse(
             $factory->createResponse(200)->withBody(
-                $factory->createStream(json_encode(self::descriptorWire(), flags: JSON_THROW_ON_ERROR)),
+                $factory->createStream(DocumentWire::descriptorJson()),
             ),
         );
         $mock->addResponse(
@@ -82,45 +84,18 @@ final class RenderToFileTest extends TestCase
             ),
         );
         $client = new PoliPage(
-            apiKey: 'pp_test_x',
+            apiKey: 'pp_sandbox_x',
             httpClient: $mock,
             requestFactory: $factory,
             streamFactory: $factory,
         );
 
-        renderToFile($client, new ProjectModeInput(project: 'p', template: 't', data: []), $this->tmpPath);
+        renderToFile($client, new RenderInput(project: 'p', template: 't', data: []), $this->tmpPath);
 
         self::assertFileExists($this->tmpPath);
         // Best-effort cleanup of the nested directory tree.
         @unlink($this->tmpPath);
         @rmdir(dirname($this->tmpPath));
         @rmdir($tmpDir);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function descriptorWire(): array
-    {
-        return [
-            'documentId' => 'doc_abc',
-            'organizationId' => 'org_xyz',
-            'projectId' => null,
-            'projectSlug' => 'p',
-            'templateId' => null,
-            'templateSlug' => 't',
-            'version' => null,
-            'environment' => 'sandbox',
-            'apiKeyId' => null,
-            'format' => 'A4',
-            'orientation' => null,
-            'locale' => null,
-            'pageCount' => 1,
-            'sizeBytes' => 256,
-            'createdAt' => '2026-05-21T12:00:00Z',
-            'metadata' => [],
-            'presignedPdfUrl' => 'https://s3.example.com/doc.pdf?sig=abc',
-            'expiresAt' => '2026-05-21T12:15:00Z',
-        ];
     }
 }

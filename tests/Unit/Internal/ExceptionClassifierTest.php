@@ -54,7 +54,7 @@ final class ExceptionClassifierTest extends TestCase
 
     public function testReturnsGoneExceptionFor410(): void
     {
-        $exception = ExceptionClassifier::fromStatus('GONE', 410, 'gone', null);
+        $exception = ExceptionClassifier::fromStatus('DOCUMENT_GONE', 410, 'gone', null);
         self::assertInstanceOf(GoneException::class, $exception);
     }
 
@@ -76,7 +76,7 @@ final class ExceptionClassifierTest extends TestCase
 
     public function testFallsBackToGenericApiStatusExceptionForUnknown4xx(): void
     {
-        $exception = ExceptionClassifier::fromStatus('PAYMENT_REQUIRED', 402, 'pay up', null);
+        $exception = ExceptionClassifier::fromStatus('RENDER_BODY_TOO_LARGE', 413, 'too large', null);
         self::assertInstanceOf(ApiStatusException::class, $exception);
         // not one of the well-known subclasses
         self::assertNotInstanceOf(BadRequestException::class, $exception);

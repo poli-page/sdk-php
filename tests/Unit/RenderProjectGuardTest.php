@@ -7,8 +7,8 @@ namespace PoliPage\Tests\Unit;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use PoliPage\PoliPageException;
-use PoliPage\ProjectModeInput;
 use PoliPage\Render;
+use PoliPage\RenderInput;
 use PoliPage\Tests\Support\FakeTransport;
 
 /**
@@ -25,7 +25,7 @@ final class RenderProjectGuardTest extends TestCase
         $render = new Render($transport);
 
         try {
-            $render->document(new ProjectModeInput(project: '', template: 't', data: []));
+            $render->document(new RenderInput(project: '', template: 't', data: []));
             self::fail('Expected PoliPageException to be thrown');
         } catch (PoliPageException $e) {
             self::assertSame(PoliPageException::PROJECT_REQUIRED_FOR_DOCUMENT, $e->errorCode);
@@ -41,7 +41,7 @@ final class RenderProjectGuardTest extends TestCase
         $render = new Render($transport);
 
         try {
-            $render->pdf(new ProjectModeInput(project: '', template: 't', data: []));
+            $render->pdf(new RenderInput(project: '', template: 't', data: []));
             self::fail('Expected PoliPageException to be thrown');
         } catch (PoliPageException $e) {
             self::assertSame(PoliPageException::PROJECT_REQUIRED_FOR_DOCUMENT, $e->errorCode);
@@ -58,7 +58,7 @@ final class RenderProjectGuardTest extends TestCase
         $render = new Render($transport);
 
         try {
-            $render->pdfStream(new ProjectModeInput(project: '', template: 't', data: []));
+            $render->pdfStream(new RenderInput(project: '', template: 't', data: []));
             self::fail('Expected PoliPageException to be thrown');
         } catch (PoliPageException $e) {
             self::assertSame(PoliPageException::PROJECT_REQUIRED_FOR_DOCUMENT, $e->errorCode);

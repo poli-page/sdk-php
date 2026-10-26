@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Environments: an API key belongs to one environment (`pp_sandbox_…`,
+`pp_live_…`, `pp_staging_…`) and a render uses the project's copy
+published in that environment. Breaking, with no deprecation window.
+
+### Removed
+
+- `ProjectModeInput::$version`: there is no version to pick and an API
+  key cannot render the draft. The API answers `400 VALIDATION_ERROR` to
+  a `version` field.
+- `render->preview()`, `PreviewResult` and `InlineModeInput`: the API
+  removed `POST /v1/render/preview` and inline-HTML rendering.
+  `documents->preview($id)` (the stored HTML of a rendered document)
+  stays.
+- `DocumentDescriptor::$version`.
+- Known error codes `VERSION_NOT_FOUND`, `INVALID_VERSION_FORMAT`,
+  `VERSION_REQUIRED`, `INVALID_VERSION_FOR_KEY_ENV`,
+  `MISSING_PROJECT_OR_TEMPLATE`, `GONE` (the API answers
+  `410 DOCUMENT_GONE`) and `PAYMENT_REQUIRED` (payment grace is
+  `403 ORGANIZATION_PAYMENT_GRACE`).
+
+### Changed
+
+- `ProjectModeInput` is renamed `RenderInput` and is the only render
+  input; the abstract `RenderInput` base is gone. The request body holds
+  only `project`, `template`, `data`, `metadata`, `format`,
+  `orientation` and `locale`, with unset optional fields omitted.
+- `ThumbnailOptions`: every option is optional (`width` included),
+  `format` accepts `jpeg`, `webp` or `png`, and an unset option is not
+  sent. `documents->thumbnails($id)` takes the options as an optional
+  argument and sends `{}` without them. The SDK does not check option
+  bounds; the API answers `400 VALIDATION_ERROR`.
+- `DocumentDescriptor::$environment` is documented as any environment
+  name, returned verbatim.
+- `documents->delete($id)` is idempotent: the API answers `204` for an
+  already-deleted document too.
+
+### Added
+
+- Known error codes `PUBLISH_IN_PROGRESS`, `ENVIRONMENT_MISMATCH`,
+  `PROJECT_NOT_IN_ENVIRONMENT`, `TEMPLATE_NOT_FOUND`, `DOCUMENT_GONE`,
+  `ENVIRONMENT_PROTECTED`, `ORGANIZATION_PAYMENT_GRACE`,
+  `EMPTY_DOCUMENT`, `STORAGE_ACCESS_DENIED`, `ORGANIZATION_MIGRATING`,
+  `PROJECT_NOT_FOUND`, `TEMPLATE_ERROR`, `THUMBNAILS_NOT_AVAILABLE`,
+  `RATE_LIMIT_EXCEEDED`, `RENDER_BODY_TOO_LARGE`, `DOCUMENT_TOO_LARGE`
+  and `RENDER_TIMEOUT`. Error codes stay an open set: an unknown code is
+  passed through unchanged. A `503 PUBLISH_IN_PROGRESS` (a render that
+  waited on a publish) is retried like any other 5xx, honouring
+  `Retry-After`.
+
 ## [0.9.0] - 2026-06-22
 
 The first public release. The API surface is complete but not yet frozen;
