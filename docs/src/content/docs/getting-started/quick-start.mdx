@@ -11,13 +11,15 @@ This page walks through your first render — from key to PDF — without touchi
 
 ## Set your API key
 
-Export your key into the environment your script runs in:
+Create a `sandbox` key in your organization (it starts with `pp_sandbox_`) and export it into the environment your script runs in:
 
 ```bash
-export POLI_PAGE_API_KEY=pp_test_...
+export POLI_PAGE_API_KEY=pp_sandbox_x
 ```
 
 ## Render a PDF
+
+Every organization gets a `getting-started` project, published into its `sandbox` environment, with a `welcome` template. A sandbox key renders it as-is:
 
 ```php
 <?php
@@ -25,18 +27,20 @@ export POLI_PAGE_API_KEY=pp_test_...
 require __DIR__ . '/vendor/autoload.php';
 
 use PoliPage\PoliPage;
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
 
 $client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
 
-$pdf = $client->render->pdf(new ProjectModeInput(
-    project: 'billing',
-    template: 'invoice',
-    data: ['invoiceNumber' => 'INV-001', 'total' => 1280],
+$pdf = $client->render->pdf(new RenderInput(
+    project: 'getting-started',
+    template: 'welcome',
+    data: ['name' => 'SDK Demo'],
 ));
 ```
 
 `$pdf` is a binary string. Write it to disk, stream it to S3, or send it back through an HTTP response.
+
+`getting-started` is a normal, editable project. If your organization renamed it, deleted it or removed it from `sandbox`, the API answers `404 PROJECT_NOT_FOUND` or `404 PROJECT_NOT_IN_ENVIRONMENT`: use a fresh organization. To render your own templates, publish them to the key's environment and swap the slugs.
 
 ## Example
 
@@ -46,17 +50,17 @@ $pdf = $client->render->pdf(new ProjectModeInput(
 require __DIR__ . '/vendor/autoload.php';
 
 use PoliPage\PoliPage;
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
 
 $client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
 
-$pdf = $client->render->pdf(new ProjectModeInput(
-    project: 'billing',
-    template: 'invoice',
-    data: ['invoiceNumber' => 'INV-001', 'total' => 1280],
+$pdf = $client->render->pdf(new RenderInput(
+    project: 'getting-started',
+    template: 'welcome',
+    data: ['name' => 'SDK Demo'],
 ));
 
-file_put_contents('./invoice.pdf', $pdf);
+file_put_contents('./welcome.pdf', $pdf);
 ```
 
 ## See also

@@ -60,7 +60,7 @@ $mock->addResponse(new Response(200, [], '{"documentId":"doc_123"}'));
 
 $factory = new Psr17Factory();
 $client = new PoliPage(
-    apiKey: 'pp_test_demo',
+    apiKey: 'pp_sandbox_x',
     httpClient: $mock,
     requestFactory: $factory,
     streamFactory: $factory,
@@ -77,7 +77,7 @@ require __DIR__ . '/vendor/autoload.php';
 use GuzzleHttp\Client as GuzzleClient;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use PoliPage\PoliPage;
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
 
 $factory = new Psr17Factory();
 
@@ -88,7 +88,7 @@ $client = new PoliPage(
     streamFactory: $factory,
 );
 
-$pdf = $client->render->pdf(new ProjectModeInput(
+$pdf = $client->render->pdf(new RenderInput(
     project: 'billing',
     template: 'invoice',
     data: ['invoiceNumber' => 'INV-001', 'total' => 1280],

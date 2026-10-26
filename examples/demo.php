@@ -6,11 +6,27 @@ declare(strict_types=1);
  * poli-page/sdk — runnable end-to-end demo.
  *
  * Walks through every public method of the SDK and writes the artefacts to
- * `examples/output/`. Uses the `getting-started` project's `welcome`
- * template, published into every Poli Page org's `sandbox` environment, so
- * this works out of the box for any newcomer with a fresh sandbox key.
+ * `examples/output/`. Renders the `getting-started` project's `welcome`
+ * template, published into every Poli Page org's `sandbox` environment when
+ * the org is created, so it works as-is with a sandbox key (`pp_sandbox_…`)
+ * of a fresh organization. An org that renamed, deleted or unpublished
+ * `getting-started` gets 404 PROJECT_NOT_FOUND / PROJECT_NOT_IN_ENVIRONMENT.
+ *
+ * Steps:
+ *   1. render->pdf()            PDF bytes in memory
+ *   2. render->pdfStream()      PSR-7 stream of PDF bytes
+ *   3. renderToFile()           render straight to disk
+ *   4. render->document()       store the document, return the descriptor
+ *   5. documents->get(id)       re-fetch with a fresh presigned URL
+ *   6. documents->thumbnails()  page thumbnails (Starter+ tier)
+ *   7. documents->preview(id)   stored HTML of the rendered document
+ *   8. documents->delete(id)    soft-delete the document
+ *   9. not-found                render an unknown template, catch 404 TEMPLATE_NOT_FOUND
  *
  * Run:  composer install && php examples/demo.php
+ *
+ * Reads POLI_PAGE_API_KEY and the optional POLI_PAGE_BASE_URL from the
+ * environment or the repo-root `.env`; prompts for a key when neither has one.
  *
  * The SDK auto-discovers `symfony/http-client` via php-http/discovery (it's
  * in this project's `require-dev`); in your own application install any
@@ -20,7 +36,6 @@ declare(strict_types=1);
 require __DIR__ . '/../vendor/autoload.php';
 require __DIR__ . '/_shared.php';
 
-use PoliPage\Exception\NotFoundException;
 use PoliPage\PoliPage;
 use PoliPage\PoliPageException;
 use PoliPage\RenderInput;
@@ -178,9 +193,9 @@ $client->documents->delete($doc->documentId);
 echo '  ' . green('✔') . ' deleted ' . $doc->documentId . "\n";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 9. Error handling — DELIBERATELY trigger a 404 TEMPLATE_NOT_FOUND
+// 9. not-found — DELIBERATELY render an unknown template (404 TEMPLATE_NOT_FOUND)
 // ─────────────────────────────────────────────────────────────────────────────
-step(9, TOTAL_STEPS, 'error handling — DEMO ONLY (we trigger an error on purpose)');
+step(9, TOTAL_STEPS, 'not-found — DEMO ONLY (we trigger an error on purpose)');
 echo yellow('  ⚠  This step is intentional — the SDK is about to throw, but the') . "\n";
 echo yellow('     demo will catch and inspect it. ') . bold('The demo is NOT crashing.') . "\n";
 echo dim('     (We ask for a template that does not exist, expecting 404 TEMPLATE_NOT_FOUND.)') . "\n\n";
@@ -188,23 +203,19 @@ echo dim('     (We ask for a template that does not exist, expecting 404 TEMPLAT
 try {
     $client->render->pdf(new RenderInput(
         project: 'getting-started',
-        template: 'does-not-exist', // intentionally unknown
+        template: 'does-not-exist',
         data: [],
     ));
     echo '  ' . red('✗ unexpected: the call succeeded but should have failed') . "\n";
-} catch (NotFoundException $e) {
-    echo '  ' . green('✔') . " Caught NotFoundException — PoliPageException exposes:\n";
+} catch (PoliPageException $e) {
+    $mark = $e->errorCode === PoliPageException::TEMPLATE_NOT_FOUND ? green('✔') : yellow('!');
+    echo '  ' . $mark . ' Caught ' . $e::class . ":\n";
     printf(
-        "       errorCode:  %s\n       status:     %d\n       requestId:  %s\n",
+        "       code:       %s\n       status:     %s\n       message:    %s\n       requestId:  %s\n",
         $e->errorCode,
-        (int) $e->status,
+        $e->status ?? 'n/a',
+        $e->getMessage(),
         $e->requestId ?? 'n/a',
-    );
-    printf(
-        "       isAuthError:       %s\n       isValidationError: %s\n       isRetryable:       %s\n",
-        $e->isAuthError() ? 'true' : 'false',
-        $e->isValidationError() ? 'true' : 'false',
-        $e->isRetryable() ? 'true' : 'false',
     );
 }
 

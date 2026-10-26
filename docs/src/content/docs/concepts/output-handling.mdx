@@ -8,9 +8,9 @@ The SDK gives you four ways to handle a rendered PDF: in-memory bytes, a PSR-7 s
 ## In-memory (`render->pdf`)
 
 ```php
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
 
-$pdf = $client->render->pdf(new ProjectModeInput(
+$pdf = $client->render->pdf(new RenderInput(
     project: 'billing',
     template: 'invoice',
     data: ['invoiceNumber' => 'INV-001'],
@@ -25,7 +25,7 @@ Best for documents that fit comfortably in process memory.
 For large PDFs or piping straight to an HTTP response or object store, use `pdfStream()` and let the SDK keep memory bounded. The return value is a PSR-7 `StreamInterface`.
 
 ```php
-$stream = $client->render->pdfStream(new ProjectModeInput(
+$stream = $client->render->pdfStream(new RenderInput(
     project: 'billing',
     template: 'invoice',
     data: ['invoiceNumber' => 'INV-001'],
@@ -42,7 +42,7 @@ use function PoliPage\renderToFile;
 
 renderToFile(
     $client,
-    new ProjectModeInput(project: 'billing', template: 'invoice', data: []),
+    new RenderInput(project: 'billing', template: 'invoice', data: []),
     './out.pdf',
 );
 ```
@@ -52,7 +52,7 @@ renderToFile(
 When you want the PDF to live on Poli Page's servers (for later download, preview, or thumbnails), use `render->document()`. It returns a `DocumentDescriptor` with `documentId`, `presignedPdfUrl`, and a `downloadPdf()` method.
 
 ```php
-$doc = $client->render->document(new ProjectModeInput(
+$doc = $client->render->document(new RenderInput(
     project: 'billing',
     template: 'invoice',
     data: ['invoiceNumber' => 'INV-001'],
@@ -70,7 +70,7 @@ $pdf = $doc->downloadPdf();
 require __DIR__ . '/vendor/autoload.php';
 
 use PoliPage\PoliPage;
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
 
 use function PoliPage\renderToFile;
 
@@ -78,7 +78,7 @@ $client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
 
 renderToFile(
     $client,
-    new ProjectModeInput(
+    new RenderInput(
         project: 'billing',
         template: 'invoice',
         data: ['invoiceNumber' => 'INV-001'],

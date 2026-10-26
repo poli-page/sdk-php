@@ -1,14 +1,88 @@
 # Migration Guide
 
-This file documents breaking changes between major versions of `poli-page/sdk`.
-Follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html): breaking
-changes only ship in major version bumps and always come with an entry here.
+This file documents breaking changes between versions of `poli-page/sdk`.
+The package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
+before 1.0.0 a breaking change ships in a minor bump (0.9.x → 0.10.0), from
+1.0.0 on only in a major bump, and it always comes with an entry here.
 
-## 1.0
+## From 0.9.x to 0.10.0
 
-The first stable release. No prior published versions exist on Packagist.
+An API key now belongs to one environment of your organization
+(`pp_sandbox_…`, `pp_live_…`, `pp_staging_…`; standard and service keys
+share this one format), and every render uses the project's copy
+published in that environment. There is no version to pick, no API key
+renders the draft, and the API no longer previews templates or renders
+inline HTML. Every removal ships at once, with no deprecation window.
 
-### Surface
+### Keys
+
+Create a key per environment in the dashboard. The `pp_test_` and
+`pp_sa_` prefixes are gone: use a `pp_sandbox_` key where you used a
+`pp_test_` one. The SDK does not check the key client-side.
+
+### `ProjectModeInput` → `RenderInput`, without `version`
+
+```php
+// 0.9.x
+use PoliPage\ProjectModeInput;
+
+$pdf = $client->render->pdf(new ProjectModeInput(
+    project: 'billing',
+    template: 'invoice',
+    version: '1.0.0',
+    data: ['invoiceNumber' => 'INV-001'],
+));
+
+// 0.10.0
+use PoliPage\RenderInput;
+
+$pdf = $client->render->pdf(new RenderInput(
+    project: 'billing',
+    template: 'invoice',
+    data: ['invoiceNumber' => 'INV-001'],
+));
+```
+
+To change what a key renders, publish the project to that key's
+environment. Passing `version:` is now an unknown named argument (PHP
+`Error`, PHPStan `argument.unknown`).
+
+### `render->preview()` and `InlineModeInput` are removed
+
+Preview templates and try inline HTML in the playground at
+[play.poli.page](https://play.poli.page). `PreviewResult` is removed too.
+`$client->documents->preview($id)`, the stored HTML of a document you
+already rendered, stays.
+
+### `DocumentDescriptor`
+
+`$version` is removed. `$environment` is any environment name, returned
+verbatim (`sandbox`, `live`, `staging`, …).
+
+### Error codes
+
+| 0.9.x constant | 0.10.0 |
+| -------------- | ------ |
+| `VERSION_NOT_FOUND`, `INVALID_VERSION_FORMAT`, `VERSION_REQUIRED`, `INVALID_VERSION_FOR_KEY_ENV` | removed: there is no version |
+| `MISSING_PROJECT_OR_TEMPLATE` | removed |
+| `GONE` | `DOCUMENT_GONE` (410: deleted, or a `sandbox` document older than 30 days) |
+| `PAYMENT_REQUIRED` | `ORGANIZATION_PAYMENT_GRACE` (403) |
+| `NOT_FOUND` on a render | `PROJECT_NOT_FOUND`, `PROJECT_NOT_IN_ENVIRONMENT` or `TEMPLATE_NOT_FOUND` |
+
+See the [CHANGELOG](CHANGELOG.md) for every added code. Error codes stay
+an open set: compare `$e->errorCode` against the constants you handle and
+let the others through.
+
+### Thumbnails
+
+Every `ThumbnailOptions` argument is optional, `format` accepts `webp`,
+and `documents->thumbnails($id)` works without options.
+
+## 0.9.0 — first public release
+
+The section below describes the 0.9.x surface, for reference.
+
+### Surface (0.9.x)
 
 ```php
 use PoliPage\PoliPage;
@@ -39,7 +113,7 @@ $client->documents->delete($id);              // → void
 renderToFile($client, $projectInput, $path);  // → void
 ```
 
-### Auto-provisioned `getting-started/welcome` template
+### Auto-provisioned `getting-started/welcome` template (0.9.x)
 
 Every Poli Page org is created with a `getting-started/welcome/1.0.0` template
 already in place. You can call

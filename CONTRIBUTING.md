@@ -31,11 +31,14 @@ plus one job each on macOS and Windows for the newest version.
 
 ## Integration tests
 
-Integration tests hit the develop API. They are excluded by default
-(grouped under `integration`); run with:
+Integration tests hit the API at `POLI_PAGE_BASE_URL` (the SDK default,
+`https://api.poli.page`, when unset). They render `getting-started`/`welcome`,
+so they need a sandbox key of an organization whose `getting-started`
+project is untouched. They are excluded by default (grouped under
+`integration`); run with:
 
 ```bash
-export POLI_PAGE_API_KEY=pp_test_...
+export POLI_PAGE_API_KEY=pp_sandbox_x
 composer test:integration
 ```
 
@@ -48,7 +51,7 @@ composer install
 php examples/demo.php
 ```
 
-The first run prompts for a `pp_test_*` key and saves it to `.env`.
+The first run prompts for a sandbox key (`pp_sandbox_…`) and saves it to `.env`.
 Subsequent runs are silent. The demo walks every public method in the
 order called out by the cross-SDK porter checklist; see
 `examples/demo.php` for the annotated source.

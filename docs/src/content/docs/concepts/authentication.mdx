@@ -1,15 +1,31 @@
 ---
 title: Authentication
-description: How the Poli Page SDK authenticates with the API using test or live keys.
+description: How the Poli Page SDK authenticates with the API using an environment's API key.
 ---
 
 import ApiKeyCallout from '@preset/components/ApiKeyCallout.astro';
 
-The Poli Page PHP SDK authenticates every request with a bearer token. The key prefix determines which environment the request hits.
+The Poli Page PHP SDK authenticates every request with a bearer token. A key belongs to exactly one environment of your organization, and every render uses the project's copy published in that environment.
 
 ## API keys
 
 <ApiKeyCallout />
+
+A key is `pp_{env}_{32 lowercase hex}`, where `{env}` is the name of the key's environment. It matches this regex:
+
+```text
+^pp_(?=[a-z][a-z0-9-]{0,19}_)[a-z][a-z0-9]*(?:-[a-z0-9]+)*_[0-9a-f]{32}$
+```
+
+| Environment                           | Key            | Watermark | Counted |
+| ------------------------------------- | -------------- | --------- | ------- |
+| `sandbox` (every org)                 | `pp_sandbox_…` | yes       | no      |
+| `live` (every org, deletable on Pro+) | `pp_live_…`    | no        | yes     |
+| created on Pro+ (e.g. `staging`)      | `pp_staging_…` | no        | yes     |
+
+"Counted" means the render counts toward the organization's monthly PDF quota. `sandbox` documents expire 30 days after creation. There is no watermark option: a template that wants a watermark outside `sandbox` uses the `poli-watermark` class.
+
+The SDK passes the key through as-is and never checks it client-side; the API rejects an unknown key with `401 INVALID_API_KEY`.
 
 Pass the key to the client factory:
 
@@ -21,12 +37,12 @@ The SDK never reads `$_ENV['POLI_PAGE_API_KEY']` implicitly. You always pass the
 
 ## Custom base URL
 
-To target the develop environment (or a self-hosted gateway), use the full constructor and pass `baseUrl`:
+The SDK targets `https://api.poli.page` by default. To go through a proxy or gateway, use the full constructor and pass `baseUrl`:
 
 ```php
 $client = new PoliPage(
     apiKey: $_ENV['POLI_PAGE_API_KEY'],
-    baseUrl: 'https://api-develop.poli.page',
+    baseUrl: 'https://pdf-gateway.internal.example', // your gateway's URL
 );
 ```
 

@@ -6,6 +6,9 @@ namespace PoliPage\Examples;
 
 const ENV_FILE = __DIR__ . '/../.env';
 
+/** The SDK contract's full-key regex: it checks the key's shape and names no environment. */
+const API_KEY_PATTERN = '/^pp_(?=[a-z][a-z0-9-]{0,19}_)[a-z][a-z0-9]*(?:-[a-z0-9]+)*_[0-9a-f]{32}$/';
+
 function useColor(): bool
 {
     if (getenv('NO_COLOR') === '1') {
@@ -151,6 +154,9 @@ function ensureApiKey(): string
     echo "   This demo needs a sandbox key (" . cyan('pp_sandbox_*') . ") to\n";
     echo "   talk to the Poli Page API. Sandbox renders are watermarked and\n";
     echo "   never count toward your quota.\n\n";
+    echo "   It renders the " . cyan('getting-started') . " project that every new\n";
+    echo "   organization gets in " . cyan('sandbox') . ". If yours renamed, deleted or\n";
+    echo "   unpublished it, use a key of a fresh organization.\n\n";
     echo bold("   How to get one:") . "\n";
     echo "     1. Sign in at " . cyan('https://app.poli.page') . "\n";
     echo "     2. Go to your organization's API keys page:\n";
@@ -173,6 +179,10 @@ function ensureApiKey(): string
 
     if ($key === '') {
         echo "\n  " . red('✗') . " No key pasted. Aborting.\n";
+        exit(1);
+    }
+    if (preg_match(API_KEY_PATTERN, $key) !== 1) {
+        echo "\n  " . red('✗') . " That is not a Poli Page API key (expected pp_{env}_ followed by 32 hex characters). Aborting.\n";
         exit(1);
     }
 
