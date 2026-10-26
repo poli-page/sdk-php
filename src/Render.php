@@ -9,8 +9,8 @@ use PoliPage\Internal\Transport;
 use Psr\Http\Message\StreamInterface;
 
 /**
- * The `render` namespace exposed as `$client->render`. Phases 2 + 3
- * cover the four render operations; Phase 4 adds Documents.
+ * The `render` namespace exposed as `$client->render`: the three render
+ * operations, all `POST /v1/render`.
  */
 final class Render
 {
@@ -35,7 +35,7 @@ final class Render
      * @throws Exception\ConnectionException       on transport failure
      * @throws PoliPageException                   on DOWNLOAD_FAILED / INTERNAL_ERROR / catch-all
      */
-    public function pdf(ProjectModeInput $input): string
+    public function pdf(RenderInput $input): string
     {
         return $this->document($input)->downloadPdf($input->timeout);
     }
@@ -48,7 +48,7 @@ final class Render
      *
      * @throws PoliPageException see {@see pdf} for the failure modes
      */
-    public function pdfStream(ProjectModeInput $input): StreamInterface
+    public function pdfStream(RenderInput $input): StreamInterface
     {
         $descriptor = $this->document($input);
 
@@ -64,7 +64,7 @@ final class Render
      *
      * @throws PoliPageException see {@see pdf} for the failure modes
      */
-    public function document(ProjectModeInput $input): DocumentDescriptor
+    public function document(RenderInput $input): DocumentDescriptor
     {
         if ($input->project === '') {
             throw new PoliPageException(
@@ -81,38 +81,5 @@ final class Render
         );
 
         return DocumentDescriptor::fromWire($raw, $this->transport);
-    }
-
-    /**
-     * Generate paginated HTML preview output for either a stored project
-     * + template or raw inline HTML. Calls `POST /v1/render/preview`.
-     *
-     * @throws PoliPageException see {@see pdf} for the failure modes
-     */
-    public function preview(RenderInput $input): PreviewResult
-    {
-        $response = $this->transport->post(
-            Constants::PATH_RENDER_PREVIEW,
-            $input->toWire(),
-            $input->idempotencyKey,
-            $input->timeout,
-        );
-
-        $html = $response['html'] ?? null;
-        $totalPages = $response['totalPages'] ?? null;
-        $environment = $response['environment'] ?? null;
-
-        if (!is_string($html) || !is_int($totalPages) || !is_string($environment)) {
-            throw new PoliPageException(
-                'Unexpected preview response shape from API',
-                PoliPageException::INTERNAL_ERROR,
-            );
-        }
-
-        return new PreviewResult(
-            html: $html,
-            totalPages: $totalPages,
-            environment: $environment,
-        );
     }
 }

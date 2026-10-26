@@ -11,7 +11,8 @@ use PHPUnit\Framework\TestCase;
 use PoliPage\Events\RequestEvent;
 use PoliPage\Events\ResponseEvent;
 use PoliPage\PoliPage;
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
+use PoliPage\Tests\Support\DocumentWire;
 
 #[CoversClass(PoliPage::class)]
 final class PoliPageHooksTest extends TestCase
@@ -32,12 +33,10 @@ final class PoliPageHooksTest extends TestCase
         // First attempt fails, second succeeds.
         $mock->addResponse($factory->createResponse(503));
         $mock->addResponse(
-            $factory->createResponse(200)->withBody($factory->createStream(json_encode([
-                'html' => '', 'totalPages' => 0, 'environment' => 'sandbox',
-            ], flags: JSON_THROW_ON_ERROR))),
+            $factory->createResponse(200)->withBody($factory->createStream(DocumentWire::descriptorJson())),
         );
 
-        $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+        $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
 
         self::assertSame([1, 2], $attempts, 'onRequest fires once per attempt with sequential counter');
     }
@@ -51,17 +50,15 @@ final class PoliPageHooksTest extends TestCase
             },
         );
         $mock->addResponse(
-            $factory->createResponse(200)->withBody($factory->createStream(json_encode([
-                'html' => '', 'totalPages' => 0, 'environment' => 'sandbox',
-            ], flags: JSON_THROW_ON_ERROR))),
+            $factory->createResponse(200)->withBody($factory->createStream(DocumentWire::descriptorJson())),
         );
 
-        $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+        $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
 
         self::assertCount(1, $events);
         self::assertSame(1, $events[0]->attempt);
         self::assertSame('POST', $events[0]->method);
-        self::assertStringContainsString('/v1/render/preview', $events[0]->url);
+        self::assertStringEndsWith('/v1/render', $events[0]->url);
     }
 
     public function testThrowingOnRequestDoesNotBreakRequest(): void
@@ -70,14 +67,12 @@ final class PoliPageHooksTest extends TestCase
             onRequest: static fn (RequestEvent $e) => throw new \RuntimeException('hook blew up'),
         );
         $mock->addResponse(
-            $factory->createResponse(200)->withBody($factory->createStream(json_encode([
-                'html' => 'ok', 'totalPages' => 1, 'environment' => 'sandbox',
-            ], flags: JSON_THROW_ON_ERROR))),
+            $factory->createResponse(200)->withBody($factory->createStream(DocumentWire::descriptorJson())),
         );
 
-        $result = $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+        $result = $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
 
-        self::assertSame('ok', $result->html);
+        self::assertSame('doc_abc', $result->documentId);
     }
 
     // -----------------------------------------------------------------------
@@ -95,12 +90,10 @@ final class PoliPageHooksTest extends TestCase
         $mock->addResponse(
             $factory->createResponse(200)
                 ->withHeader('X-Request-Id', 'req_hello')
-                ->withBody($factory->createStream(json_encode([
-                    'html' => '', 'totalPages' => 0, 'environment' => 'sandbox',
-                ], flags: JSON_THROW_ON_ERROR))),
+                ->withBody($factory->createStream(DocumentWire::descriptorJson())),
         );
 
-        $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+        $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
 
         self::assertCount(1, $events);
         self::assertSame(200, $events[0]->status);
@@ -117,12 +110,10 @@ final class PoliPageHooksTest extends TestCase
             },
         );
         $mock->addResponse(
-            $factory->createResponse(200)->withBody($factory->createStream(json_encode([
-                'html' => '', 'totalPages' => 0, 'environment' => 'sandbox',
-            ], flags: JSON_THROW_ON_ERROR))),
+            $factory->createResponse(200)->withBody($factory->createStream(DocumentWire::descriptorJson())),
         );
 
-        $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+        $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
 
         self::assertCount(1, $events);
         self::assertNull($events[0]->requestId);
@@ -140,7 +131,7 @@ final class PoliPageHooksTest extends TestCase
         $mock->addResponse($factory->createResponse(500));
 
         try {
-            $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+            $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
         } catch (\Throwable) {
             // expected
         }
@@ -154,14 +145,12 @@ final class PoliPageHooksTest extends TestCase
             onResponse: static fn (ResponseEvent $e) => throw new \RuntimeException('response hook blew up'),
         );
         $mock->addResponse(
-            $factory->createResponse(200)->withBody($factory->createStream(json_encode([
-                'html' => 'safe', 'totalPages' => 1, 'environment' => 'sandbox',
-            ], flags: JSON_THROW_ON_ERROR))),
+            $factory->createResponse(200)->withBody($factory->createStream(DocumentWire::descriptorJson())),
         );
 
-        $result = $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+        $result = $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
 
-        self::assertSame('safe', $result->html);
+        self::assertSame('doc_abc', $result->documentId);
     }
 
     // -----------------------------------------------------------------------
@@ -182,7 +171,7 @@ final class PoliPageHooksTest extends TestCase
         $factory = new Psr17Factory();
         $mock = new MockClient();
         $client = new PoliPage(
-            apiKey: 'pp_test_xyz',
+            apiKey: 'pp_sandbox_xyz',
             maxRetries: $maxRetries,
             retryDelay: 0.0,
             httpClient: $mock,

@@ -7,7 +7,7 @@ namespace PoliPage\Tests\Unit\Documents;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use PoliPage\Documents;
-use PoliPage\Exception\GoneException;
+use PoliPage\Exception\NotFoundException;
 use PoliPage\PoliPageException;
 use PoliPage\Tests\Support\FakeTransport;
 
@@ -39,23 +39,23 @@ final class DeleteTest extends TestCase
         );
     }
 
-    public function testTransportGoneExceptionSurfacesToCaller(): void
+    public function testTransportErrorSurfacesToCaller(): void
     {
         $transport = new FakeTransport();
-        $transport->deleteException = new GoneException(
-            'document already deleted',
-            PoliPageException::GONE,
-            410,
+        $transport->deleteException = new NotFoundException(
+            'document not found',
+            PoliPageException::DOCUMENT_NOT_FOUND,
+            404,
             'req_42',
         );
         $documents = new Documents($transport);
 
         try {
             $documents->delete('doc_abc');
-            self::fail('Expected GoneException to surface');
-        } catch (GoneException $e) {
-            self::assertSame(410, $e->status);
-            self::assertSame(PoliPageException::GONE, $e->errorCode);
+            self::fail('Expected NotFoundException to surface');
+        } catch (NotFoundException $e) {
+            self::assertSame(404, $e->status);
+            self::assertSame(PoliPageException::DOCUMENT_NOT_FOUND, $e->errorCode);
         }
     }
 }

@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace PoliPage;
 
 /**
- * Free-form caller metadata forwarded to the API and echoed back on
- * `preview` and `document` responses. Values are limited to primitives
+ * Free-form caller metadata forwarded to the API and echoed back on the
+ * document descriptor. Values are limited to primitives
  * (string | int | float | bool) — nested arrays and objects are rejected
  * at construction time to match the wire-contract guarantee (spec §5.4)
  * and the Node SDK's compile-time enforcement (types.ts:31).

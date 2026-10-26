@@ -12,7 +12,8 @@ use PoliPage\Events\RetryEvent;
 use PoliPage\Exception\InternalServerException;
 use PoliPage\PoliPage;
 use PoliPage\PoliPageException;
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
+use PoliPage\Tests\Support\DocumentWire;
 
 /**
  * Behavioural coverage for the bits of PoliPage's HTTP path the original
@@ -29,7 +30,7 @@ final class PoliPageTransportTest extends TestCase
         $mock = new MockClient();
         $mock->addResponse($factory->createResponse(403)->withBody($factory->createStream('Forbidden')));
         $client = new PoliPage(
-            apiKey: 'pp_test_x',
+            apiKey: 'pp_sandbox_x',
             httpClient: $mock,
             requestFactory: $factory,
             streamFactory: $factory,
@@ -50,7 +51,7 @@ final class PoliPageTransportTest extends TestCase
         $mock = new MockClient();
         $mock->addResponse($factory->createResponse(200)); // empty body
         $client = new PoliPage(
-            apiKey: 'pp_test_x',
+            apiKey: 'pp_sandbox_x',
             httpClient: $mock,
             requestFactory: $factory,
             streamFactory: $factory,
@@ -79,14 +80,12 @@ final class PoliPageTransportTest extends TestCase
                 ], flags: JSON_THROW_ON_ERROR))),
         );
         $mock->addResponse(
-            $factory->createResponse(200)->withBody($factory->createStream(json_encode([
-                'html' => '', 'totalPages' => 0, 'environment' => 'sandbox',
-            ], flags: JSON_THROW_ON_ERROR))),
+            $factory->createResponse(200)->withBody($factory->createStream(DocumentWire::descriptorJson())),
         );
 
         $events = [];
         $client = new PoliPage(
-            apiKey: 'pp_test_x',
+            apiKey: 'pp_sandbox_x',
             maxRetries: 2,
             retryDelay: 99.0, // would normally cause a long sleep — Retry-After: 0 overrides it
             httpClient: $mock,
@@ -98,7 +97,7 @@ final class PoliPageTransportTest extends TestCase
             jitterSource: static fn (): float => 0.5, // would yield jitterFactor=1.0
         );
 
-        $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+        $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
 
         self::assertCount(1, $events, 'one retry should have fired between the two responses');
         // Retry-After: 0 should win over the otherwise-99s exponential backoff,
@@ -115,14 +114,14 @@ final class PoliPageTransportTest extends TestCase
             $factory->createResponse(200)->withBody($factory->createStream('42')),
         );
         $client = new PoliPage(
-            apiKey: 'pp_test_x',
+            apiKey: 'pp_sandbox_x',
             httpClient: $mock,
             requestFactory: $factory,
             streamFactory: $factory,
         );
 
         try {
-            $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+            $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
             self::fail('Expected PoliPageException(INTERNAL_ERROR)');
         } catch (PoliPageException $e) {
             self::assertSame(PoliPageException::INTERNAL_ERROR, $e->errorCode);
@@ -138,14 +137,14 @@ final class PoliPageTransportTest extends TestCase
             $factory->createResponse(200)->withBody($factory->createStream('not json at all')),
         );
         $client = new PoliPage(
-            apiKey: 'pp_test_x',
+            apiKey: 'pp_sandbox_x',
             httpClient: $mock,
             requestFactory: $factory,
             streamFactory: $factory,
         );
 
         try {
-            $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+            $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
             self::fail('Expected PoliPageException(INTERNAL_ERROR)');
         } catch (PoliPageException $e) {
             self::assertSame(PoliPageException::INTERNAL_ERROR, $e->errorCode);
@@ -166,7 +165,7 @@ final class PoliPageTransportTest extends TestCase
             );
         }
         $client = new PoliPage(
-            apiKey: 'pp_test_x',
+            apiKey: 'pp_sandbox_x',
             maxRetries: 2,
             retryDelay: 0.0,
             httpClient: $mock,
@@ -176,7 +175,7 @@ final class PoliPageTransportTest extends TestCase
         );
 
         try {
-            $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+            $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
             self::fail('Expected InternalServerException after retries exhausted');
         } catch (InternalServerException $e) {
             self::assertSame(503, $e->status);

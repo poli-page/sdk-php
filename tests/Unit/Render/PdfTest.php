@@ -7,8 +7,9 @@ namespace PoliPage\Tests\Unit\Render;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use PoliPage\Internal\Constants;
-use PoliPage\ProjectModeInput;
 use PoliPage\Render;
+use PoliPage\RenderInput;
+use PoliPage\Tests\Support\DocumentWire;
 use PoliPage\Tests\Support\FakeTransport;
 
 #[CoversClass(Render::class)]
@@ -17,11 +18,11 @@ final class PdfTest extends TestCase
     public function testPdfPerformsRenderThenDownloadAndReturnsBytes(): void
     {
         $transport = new FakeTransport();
-        $transport->postResponse = self::renderWireResponse();
+        $transport->postResponse = DocumentWire::descriptor();
         $transport->fetchBytesResponse = "\x25PDF-1.7\nfake";
         $render = new Render($transport);
 
-        $bytes = $render->pdf(new ProjectModeInput(
+        $bytes = $render->pdf(new RenderInput(
             project: 'billing',
             template: 'invoice',
             data: ['n' => 1],
@@ -41,11 +42,11 @@ final class PdfTest extends TestCase
     public function testPdfPropagatesIdempotencyKeyToTheRenderHopOnly(): void
     {
         $transport = new FakeTransport();
-        $transport->postResponse = self::renderWireResponse();
+        $transport->postResponse = DocumentWire::descriptor();
         $transport->fetchBytesResponse = 'bytes';
         $render = new Render($transport);
 
-        $render->pdf(new ProjectModeInput(
+        $render->pdf(new RenderInput(
             project: 'p',
             template: 't',
             data: [],
@@ -55,32 +56,5 @@ final class PdfTest extends TestCase
         self::assertSame('idem-pdf', $transport->postCalls[0]['idempotencyKey']);
         // fetchBytes call carries no idempotency surface — confirms by not blowing up; presence verified above.
         self::assertNull($transport->fetchBytesCalls[0]['timeout']);
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private static function renderWireResponse(): array
-    {
-        return [
-            'documentId' => 'doc_abc',
-            'organizationId' => 'org_xyz',
-            'projectId' => null,
-            'projectSlug' => 'p',
-            'templateId' => null,
-            'templateSlug' => 't',
-            'version' => null,
-            'environment' => 'sandbox',
-            'apiKeyId' => null,
-            'format' => 'A4',
-            'orientation' => null,
-            'locale' => null,
-            'pageCount' => 1,
-            'sizeBytes' => 256,
-            'createdAt' => '2026-05-21T12:00:00Z',
-            'metadata' => [],
-            'presignedPdfUrl' => 'https://s3.example.com/doc.pdf?sig=abc',
-            'expiresAt' => '2026-05-21T12:15:00Z',
-        ];
     }
 }

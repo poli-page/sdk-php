@@ -15,12 +15,12 @@ final class RequestEventTest extends TestCase
     {
         $event = new RequestEvent(
             method: 'POST',
-            url: 'https://api.poli.page/v1/render/preview',
+            url: 'https://api.poli.page/v1/render',
             attempt: 1,
         );
 
         self::assertSame('POST', $event->method);
-        self::assertSame('https://api.poli.page/v1/render/preview', $event->url);
+        self::assertSame('https://api.poli.page/v1/render', $event->url);
         self::assertSame(1, $event->attempt);
     }
 

@@ -5,17 +5,19 @@ declare(strict_types=1);
 namespace PoliPage\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use PoliPage\Orientation;
 use PoliPage\PageFormat;
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
+use PoliPage\RenderMetadata;
 
-#[CoversClass(ProjectModeInput::class)]
-final class ProjectModeInputTest extends TestCase
+#[CoversClass(RenderInput::class)]
+final class RenderInputTest extends TestCase
 {
     public function testFormatRoundTripsWhenProvided(): void
     {
-        $input = new ProjectModeInput(
+        $input = new RenderInput(
             project: 'billing',
             template: 'invoice',
             data: [],
@@ -27,7 +29,7 @@ final class ProjectModeInputTest extends TestCase
 
     public function testFormatIsNullWhenOmitted(): void
     {
-        $input = new ProjectModeInput(
+        $input = new RenderInput(
             project: 'billing',
             template: 'invoice',
             data: [],
@@ -38,7 +40,7 @@ final class ProjectModeInputTest extends TestCase
 
     public function testToWireIncludesFormatAsStringValue(): void
     {
-        $input = new ProjectModeInput(
+        $input = new RenderInput(
             project: 'billing',
             template: 'invoice',
             data: [],
@@ -52,7 +54,7 @@ final class ProjectModeInputTest extends TestCase
 
     public function testToWireOmitsFormatKeyWhenNull(): void
     {
-        $input = new ProjectModeInput(
+        $input = new RenderInput(
             project: 'billing',
             template: 'invoice',
             data: [],
@@ -63,7 +65,7 @@ final class ProjectModeInputTest extends TestCase
 
     public function testJsonEncodesFormatAsA5String(): void
     {
-        $input = new ProjectModeInput(
+        $input = new RenderInput(
             project: 'billing',
             template: 'invoice',
             data: [],
@@ -76,7 +78,7 @@ final class ProjectModeInputTest extends TestCase
 
     public function testJsonEncodingOmitsFormatKeyWhenNull(): void
     {
-        $input = new ProjectModeInput(
+        $input = new RenderInput(
             project: 'billing',
             template: 'invoice',
             data: [],
@@ -88,7 +90,7 @@ final class ProjectModeInputTest extends TestCase
 
     public function testOrientationRoundTripsWhenProvided(): void
     {
-        $input = new ProjectModeInput(
+        $input = new RenderInput(
             project: 'billing',
             template: 'invoice',
             data: [],
@@ -100,7 +102,7 @@ final class ProjectModeInputTest extends TestCase
 
     public function testToWireIncludesOrientationAsWireString(): void
     {
-        $input = new ProjectModeInput(
+        $input = new RenderInput(
             project: 'billing',
             template: 'invoice',
             data: [],
@@ -114,12 +116,70 @@ final class ProjectModeInputTest extends TestCase
 
     public function testToWireOmitsOrientationKeyWhenNull(): void
     {
-        $input = new ProjectModeInput(
+        $input = new RenderInput(
             project: 'billing',
             template: 'invoice',
             data: [],
         );
 
         self::assertArrayNotHasKey('orientation', $input->toWire());
+    }
+
+    public function testToWireHoldsExactlyTheSevenDocumentedFieldsWhenEverythingIsSet(): void
+    {
+        $input = new RenderInput(
+            project: 'billing',
+            template: 'invoice',
+            data: ['n' => 1],
+            format: PageFormat::A5,
+            orientation: Orientation::Landscape,
+            locale: 'fr-FR',
+            metadata: new RenderMetadata(['customerId' => 'cust_1']),
+            idempotencyKey: 'idem-1',
+            timeout: 5.0,
+        );
+
+        self::assertSame(
+            [
+                'project' => 'billing',
+                'template' => 'invoice',
+                'data' => ['n' => 1],
+                'format' => 'A5',
+                'orientation' => 'landscape',
+                'locale' => 'fr-FR',
+                'metadata' => ['customerId' => 'cust_1'],
+            ],
+            $input->toWire(),
+        );
+    }
+
+    public function testToWireHoldsOnlyTheRequiredFieldsWhenNoOptionalIsSet(): void
+    {
+        $input = new RenderInput(project: 'billing', template: 'invoice', data: []);
+
+        self::assertSame(['project' => 'billing', 'template' => 'invoice', 'data' => []], $input->toWire());
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function removedOrForeignFields(): iterable
+    {
+        yield 'version' => ['version'];
+        yield 'environment' => ['environment'];
+    }
+
+    #[DataProvider('removedOrForeignFields')]
+    public function testRejectsFieldsOutsideTheContract(string $field): void
+    {
+        $this->expectException(\Error::class);
+        $this->expectExceptionMessage('Unknown named parameter $' . $field);
+
+        (new \ReflectionClass(RenderInput::class))->newInstanceArgs([
+            'project' => 'billing',
+            'template' => 'invoice',
+            'data' => [],
+            $field => 'x',
+        ]);
     }
 }

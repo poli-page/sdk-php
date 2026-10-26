@@ -71,6 +71,53 @@ final class ThumbnailsTest extends TestCase
         );
     }
 
+    public function testSendsAnEmptyBodyWithoutOptions(): void
+    {
+        $transport = new FakeTransport();
+        $transport->postResponse = ['thumbnails' => []];
+        $documents = new Documents($transport);
+
+        $documents->thumbnails('doc_abc');
+
+        self::assertSame([], $transport->postCalls[0]['body']);
+    }
+
+    public function testSendsAnEmptyBodyWhenNoOptionIsSet(): void
+    {
+        $transport = new FakeTransport();
+        $transport->postResponse = ['thumbnails' => []];
+        $documents = new Documents($transport);
+
+        $documents->thumbnails('doc_abc', new ThumbnailOptions());
+
+        self::assertSame([], $transport->postCalls[0]['body']);
+    }
+
+    public function testSendsOnlyTheOptionsThatAreSet(): void
+    {
+        $transport = new FakeTransport();
+        $transport->postResponse = ['thumbnails' => []];
+        $documents = new Documents($transport);
+
+        $documents->thumbnails('doc_abc', new ThumbnailOptions(format: 'webp'));
+
+        self::assertSame(['thumbnails' => ['format' => 'webp']], $transport->postCalls[0]['body']);
+    }
+
+    public function testForwardsOutOfRangeValuesForTheApiToValidate(): void
+    {
+        $transport = new FakeTransport();
+        $transport->postResponse = ['thumbnails' => []];
+        $documents = new Documents($transport);
+
+        $documents->thumbnails('doc_abc', new ThumbnailOptions(width: 10_000, quality: 0));
+
+        self::assertSame(
+            ['thumbnails' => ['width' => 10_000, 'quality' => 0]],
+            $transport->postCalls[0]['body'],
+        );
+    }
+
     public function testForwardsAllOptionalsWhenSupplied(): void
     {
         $transport = new FakeTransport();

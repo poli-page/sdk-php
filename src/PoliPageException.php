@@ -37,27 +37,38 @@ class PoliPageException extends \RuntimeException
     public const DOWNLOAD_FAILED = 'DOWNLOAD_FAILED';
     public const INTERNAL_ERROR = 'INTERNAL_ERROR';
 
-    // Known API codes per spec §7.2 — pass-through verbatim.
+    // Known API codes — passed through verbatim. The set is open: the API may
+    // return a code missing here, and `$errorCode` carries it unchanged.
     public const MISSING_API_KEY = 'MISSING_API_KEY';
     public const INVALID_API_KEY = 'INVALID_API_KEY';
-    public const PAYMENT_REQUIRED = 'PAYMENT_REQUIRED';
     public const FORBIDDEN = 'FORBIDDEN';
     public const ORGANIZATION_CANCELLED = 'ORGANIZATION_CANCELLED';
     public const ORGANIZATION_PURGED = 'ORGANIZATION_PURGED';
+    public const ORGANIZATION_PAYMENT_GRACE = 'ORGANIZATION_PAYMENT_GRACE';
+    public const ENVIRONMENT_PROTECTED = 'ENVIRONMENT_PROTECTED';
+    public const THUMBNAILS_NOT_AVAILABLE = 'THUMBNAILS_NOT_AVAILABLE';
     public const NOT_FOUND = 'NOT_FOUND';
-    public const VERSION_NOT_FOUND = 'VERSION_NOT_FOUND';
+    public const PROJECT_NOT_FOUND = 'PROJECT_NOT_FOUND';
+    public const PROJECT_NOT_IN_ENVIRONMENT = 'PROJECT_NOT_IN_ENVIRONMENT';
+    public const TEMPLATE_NOT_FOUND = 'TEMPLATE_NOT_FOUND';
     public const DOCUMENT_NOT_FOUND = 'DOCUMENT_NOT_FOUND';
-    public const GONE = 'GONE';
+    public const DOCUMENT_GONE = 'DOCUMENT_GONE';
     public const VALIDATION_ERROR = 'VALIDATION_ERROR';
     public const MISSING_DATA = 'MISSING_DATA';
-    public const MISSING_PROJECT_OR_TEMPLATE = 'MISSING_PROJECT_OR_TEMPLATE';
     public const MISSING_TEMPLATE_SLUG = 'MISSING_TEMPLATE_SLUG';
     public const PROJECT_REQUIRED_FOR_DOCUMENT = 'PROJECT_REQUIRED_FOR_DOCUMENT';
-    public const INVALID_VERSION_FORMAT = 'INVALID_VERSION_FORMAT';
-    public const VERSION_REQUIRED = 'VERSION_REQUIRED';
-    public const INVALID_VERSION_FOR_KEY_ENV = 'INVALID_VERSION_FOR_KEY_ENV';
+    public const ENVIRONMENT_MISMATCH = 'ENVIRONMENT_MISMATCH';
+    public const EMPTY_DOCUMENT = 'EMPTY_DOCUMENT';
+    public const TEMPLATE_ERROR = 'TEMPLATE_ERROR';
+    public const RENDER_BODY_TOO_LARGE = 'RENDER_BODY_TOO_LARGE';
+    public const DOCUMENT_TOO_LARGE = 'DOCUMENT_TOO_LARGE';
     public const QUOTA_EXCEEDED = 'QUOTA_EXCEEDED';
     public const OVERAGE_CAP_EXCEEDED = 'OVERAGE_CAP_EXCEEDED';
+    public const RATE_LIMIT_EXCEEDED = 'RATE_LIMIT_EXCEEDED';
+    public const STORAGE_ACCESS_DENIED = 'STORAGE_ACCESS_DENIED';
+    public const PUBLISH_IN_PROGRESS = 'PUBLISH_IN_PROGRESS';
+    public const ORGANIZATION_MIGRATING = 'ORGANIZATION_MIGRATING';
+    public const RENDER_TIMEOUT = 'RENDER_TIMEOUT';
 
     /** Same wire value as INTERNAL_ERROR; distinct constant name disambiguates at call sites. */
     public const API_INTERNAL_ERROR = 'INTERNAL_ERROR';

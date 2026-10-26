@@ -30,7 +30,7 @@ final class Documents
      * @throws Exception\AuthenticationException   on 401
      * @throws Exception\PermissionDeniedException on 403
      * @throws Exception\NotFoundException         on 404
-     * @throws Exception\GoneException             on 410 (document soft-deleted)
+     * @throws Exception\GoneException             on 410 DOCUMENT_GONE (document soft-deleted or expired)
      * @throws PoliPageException                   catch-all base
      */
     public function get(string $id): DocumentDescriptor
@@ -71,8 +71,8 @@ final class Documents
      *
      * The deployed API wants the options object nested under a top-level
      * `thumbnails` key (`{"thumbnails": {...options}}`); the SDK wraps
-     * and unwraps so callers never see the envelope. Mirrors Node
-     * documents.ts:96.
+     * and unwraps so callers never see the envelope. Without options (or
+     * with none set) the body is `{}` and the API applies its defaults.
      *
      * Spec §6.3. POST /v1/documents/:id/thumbnails.
      *
@@ -80,11 +80,12 @@ final class Documents
      *
      * @throws PoliPageException see {@see get} for the failure modes
      */
-    public function thumbnails(string $id, ThumbnailOptions $options): array
+    public function thumbnails(string $id, ?ThumbnailOptions $options = null): array
     {
+        $wire = $options?->toWire() ?? [];
         $response = $this->transport->post(
             sprintf(Constants::PATH_DOCUMENT_THUMBNAILS, rawurlencode($id)),
-            ['thumbnails' => $options->toWire()],
+            $wire === [] ? [] : ['thumbnails' => $wire],
             null,
             null,
         );
@@ -113,8 +114,8 @@ final class Documents
 
     /**
      * Soft-delete a stored document. The PDF is purged from storage;
-     * metadata is retained for audit. A re-delete surfaces as a
-     * {@see Exception\GoneException} from the transport layer.
+     * metadata is retained for audit. Idempotent: the API answers `204`
+     * for an already-deleted document too, so a re-delete resolves.
      *
      * Spec §6.4. DELETE /v1/documents/:id.
      *

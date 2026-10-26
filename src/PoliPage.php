@@ -37,13 +37,12 @@ use Psr\Log\NullLogger;
  * @example
  * ```php
  * use PoliPage\PoliPage;
- * use PoliPage\ProjectModeInput;
+ * use PoliPage\RenderInput;
  *
  * $client = PoliPage::client($_ENV['POLI_PAGE_API_KEY']);
- * $preview = $client->render->preview(new ProjectModeInput(
+ * $pdf = $client->render->pdf(new RenderInput(
  *     project: 'billing',
  *     template: 'invoice',
- *     version: '1.0.0',
  *     data: ['invoiceNumber' => 'INV-001'],
  * ));
  * ```
@@ -132,7 +131,8 @@ final class PoliPage implements Transport
     {
         $key = $idempotencyKey ?? Uuid4::generate();
         try {
-            $payload = json_encode($body, flags: JSON_THROW_ON_ERROR);
+            // Why: the API takes a JSON object body; PHP encodes an empty array as `[]`.
+            $payload = json_encode($body === [] ? new \stdClass() : $body, flags: JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
             throw new PoliPageException(
                 'Failed to JSON-encode request body: ' . $e->getMessage(),

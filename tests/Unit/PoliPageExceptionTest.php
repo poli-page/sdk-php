@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace PoliPage\Tests\Unit;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use PoliPage\Exception\ApiStatusException;
 use PoliPage\Exception\AuthenticationException;
@@ -117,7 +118,7 @@ final class PoliPageExceptionTest extends TestCase
         self::assertFalse((new AuthenticationException('msg', 'INVALID_API_KEY', 401))->isRetryable());
         self::assertFalse((new PermissionDeniedException('msg', 'FORBIDDEN', 403))->isRetryable());
         self::assertFalse((new NotFoundException('msg', 'NOT_FOUND', 404))->isRetryable());
-        self::assertFalse((new GoneException('msg', 'GONE', 410))->isRetryable());
+        self::assertFalse((new GoneException('msg', 'DOCUMENT_GONE', 410))->isRetryable());
     }
 
     public function testIsRetryableFalseForAborted(): void
@@ -141,7 +142,7 @@ final class PoliPageExceptionTest extends TestCase
                 new AuthenticationException('msg', 'INVALID_API_KEY', 401),
                 new PermissionDeniedException('msg', 'FORBIDDEN', 403),
                 new NotFoundException('msg', 'NOT_FOUND', 404),
-                new GoneException('msg', 'GONE', 410),
+                new GoneException('msg', 'DOCUMENT_GONE', 410),
                 new RateLimitException('msg', 'QUOTA_EXCEEDED', 429),
                 new InternalServerException('msg', 'INTERNAL_ERROR', 500),
             ] as $exception
@@ -172,5 +173,76 @@ final class PoliPageExceptionTest extends TestCase
         $err = new \PoliPage\Exception\TimeoutException('slow', PoliPageException::TIMEOUT);
         self::assertSame(504, $err->toPayload()['status']);
         self::assertNull($err->status);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function knownApiCodes(): iterable
+    {
+        $codes = [
+            // kept
+            'MISSING_API_KEY', 'INVALID_API_KEY', 'ORGANIZATION_CANCELLED', 'ORGANIZATION_PURGED',
+            'FORBIDDEN', 'VALIDATION_ERROR', 'MISSING_DATA', 'MISSING_TEMPLATE_SLUG',
+            'PROJECT_REQUIRED_FOR_DOCUMENT', 'NOT_FOUND', 'DOCUMENT_NOT_FOUND', 'QUOTA_EXCEEDED',
+            'OVERAGE_CAP_EXCEEDED', 'INTERNAL_ERROR',
+            // added with environments
+            'PUBLISH_IN_PROGRESS', 'ENVIRONMENT_MISMATCH', 'PROJECT_NOT_IN_ENVIRONMENT',
+            'TEMPLATE_NOT_FOUND', 'DOCUMENT_GONE', 'ENVIRONMENT_PROTECTED',
+            'ORGANIZATION_PAYMENT_GRACE', 'EMPTY_DOCUMENT', 'STORAGE_ACCESS_DENIED',
+            'ORGANIZATION_MIGRATING', 'PROJECT_NOT_FOUND', 'TEMPLATE_ERROR',
+            'THUMBNAILS_NOT_AVAILABLE', 'RATE_LIMIT_EXCEEDED', 'RENDER_BODY_TOO_LARGE',
+            'DOCUMENT_TOO_LARGE', 'RENDER_TIMEOUT',
+        ];
+        foreach ($codes as $code) {
+            yield $code => [$code];
+        }
+    }
+
+    #[DataProvider('knownApiCodes')]
+    public function testKnownApiCodeIsAConstantCarryingItsWireValue(string $code): void
+    {
+        $constant = PoliPageException::class . '::' . $code;
+
+        self::assertTrue(\defined($constant), "missing known code {$code}");
+        self::assertSame($code, \constant($constant));
+    }
+
+    public function testKnownApiCodesAreExactlyTheThirtyOneOfTheContract(): void
+    {
+        $sdkCodes = ['invalid_options', 'network_error', 'timeout', 'aborted', 'unknown_error', 'DOWNLOAD_FAILED'];
+        $apiCodes = [];
+        foreach ((new \ReflectionClass(PoliPageException::class))->getConstants() as $value) {
+            if (\is_string($value) && !\in_array($value, $sdkCodes, true)) {
+                $apiCodes[$value] = $value;
+            }
+        }
+        $apiCodes = array_values($apiCodes);
+        sort($apiCodes);
+
+        $expected = array_keys(iterator_to_array(self::knownApiCodes()));
+        sort($expected);
+
+        self::assertCount(31, $expected);
+        self::assertSame($expected, $apiCodes);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function removedApiCodes(): iterable
+    {
+        foreach ([
+            'VERSION_NOT_FOUND', 'INVALID_VERSION_FORMAT', 'VERSION_REQUIRED',
+            'INVALID_VERSION_FOR_KEY_ENV', 'MISSING_PROJECT_OR_TEMPLATE', 'GONE', 'PAYMENT_REQUIRED',
+        ] as $code) {
+            yield $code => [$code];
+        }
+    }
+
+    #[DataProvider('removedApiCodes')]
+    public function testRemovedApiCodeIsNoLongerAConstant(string $code): void
+    {
+        self::assertFalse(\defined(PoliPageException::class . '::' . $code));
     }
 }

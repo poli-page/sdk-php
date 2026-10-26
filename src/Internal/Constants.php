@@ -28,7 +28,6 @@ final class Constants
     public const USER_AGENT_PREFIX = 'poli-page-sdk-php/';
 
     public const PATH_RENDER = '/v1/render';
-    public const PATH_RENDER_PREVIEW = '/v1/render/preview';
 
     /** sprintf template — caller passes the rawurlencode'd document id. */
     public const PATH_DOCUMENT = '/v1/documents/%s';

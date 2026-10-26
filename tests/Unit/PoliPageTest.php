@@ -9,15 +9,18 @@ use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use PoliPage\Events\RetryEvent;
+use PoliPage\Exception\ApiStatusException;
 use PoliPage\Exception\AuthenticationException;
 use PoliPage\Exception\BadRequestException;
 use PoliPage\Exception\ConnectionException;
 use PoliPage\Exception\InternalServerException;
+use PoliPage\Exception\NotFoundException;
 use PoliPage\Internal\Constants;
 use PoliPage\Internal\Version;
 use PoliPage\PoliPage;
 use PoliPage\PoliPageException;
-use PoliPage\ProjectModeInput;
+use PoliPage\RenderInput;
+use PoliPage\Tests\Support\DocumentWire;
 use Psr\Http\Client\NetworkExceptionInterface;
 use Psr\Http\Message\RequestInterface;
 
@@ -39,26 +42,21 @@ final class PoliPageTest extends TestCase
         }
     }
 
-    public function testSuccessfulPreviewSendsExpectedHttpRequestAndDecodesBody(): void
+    public function testSuccessfulRenderSendsExpectedHttpRequestAndDecodesBody(): void
     {
         [$client, $mock, $factory] = $this->makeClientWithMock();
         $mock->addResponse(
-            $factory->createResponse(200)->withBody($factory->createStream(json_encode([
-                'html' => '<p>hi</p>',
-                'totalPages' => 2,
-                'environment' => 'sandbox',
-            ], flags: JSON_THROW_ON_ERROR))),
+            $factory->createResponse(200)->withBody($factory->createStream(DocumentWire::descriptorJson())),
         );
 
-        $result = $client->render->preview(new ProjectModeInput(
+        $result = $client->render->document(new RenderInput(
             project: 'billing',
             template: 'invoice',
             data: ['n' => 1],
-            version: '1.0.0',
         ));
 
-        self::assertSame('<p>hi</p>', $result->html);
-        self::assertSame(2, $result->totalPages);
+        self::assertSame('doc_abc', $result->documentId);
+        self::assertSame(1, $result->pageCount);
         self::assertSame('sandbox', $result->environment);
 
         $request = $mock->getLastRequest();
@@ -66,10 +64,10 @@ final class PoliPageTest extends TestCase
         self::assertInstanceOf(RequestInterface::class, $request);
         self::assertSame('POST', $request->getMethod());
         self::assertSame(
-            Constants::DEFAULT_BASE_URL . Constants::PATH_RENDER_PREVIEW,
+            Constants::DEFAULT_BASE_URL . Constants::PATH_RENDER,
             (string) $request->getUri(),
         );
-        self::assertSame('Bearer pp_test_xyz', $request->getHeaderLine('Authorization'));
+        self::assertSame('Bearer pp_sandbox_xyz', $request->getHeaderLine('Authorization'));
         self::assertSame('application/json', $request->getHeaderLine('Content-Type'));
         self::assertSame('application/json', $request->getHeaderLine('Accept'));
         self::assertSame(
@@ -88,7 +86,6 @@ final class PoliPageTest extends TestCase
                 'project' => 'billing',
                 'template' => 'invoice',
                 'data' => ['n' => 1],
-                'version' => '1.0.0',
             ],
             $body,
         );
@@ -100,14 +97,10 @@ final class PoliPageTest extends TestCase
         $mock->addResponse($factory->createResponse(503));
         $mock->addResponse($factory->createResponse(503));
         $mock->addResponse(
-            $factory->createResponse(200)->withBody($factory->createStream(json_encode([
-                'html' => '',
-                'totalPages' => 0,
-                'environment' => 'sandbox',
-            ], flags: JSON_THROW_ON_ERROR))),
+            $factory->createResponse(200)->withBody($factory->createStream(DocumentWire::descriptorJson())),
         );
 
-        $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+        $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
 
         self::assertCount(3, $mock->getRequests());
     }
@@ -124,7 +117,7 @@ final class PoliPageTest extends TestCase
         $mock->addResponse($factory->createResponse(503));
 
         try {
-            $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+            $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
             self::fail('Expected InternalServerException');
         } catch (InternalServerException $e) {
             self::assertSame(503, $e->status);
@@ -143,7 +136,7 @@ final class PoliPageTest extends TestCase
         );
 
         try {
-            $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+            $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
             self::fail('Expected AuthenticationException');
         } catch (AuthenticationException $e) {
             self::assertSame(401, $e->status);
@@ -164,12 +157,123 @@ final class PoliPageTest extends TestCase
         );
 
         try {
-            $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+            $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
             self::fail('Expected BadRequestException');
         } catch (BadRequestException $e) {
             self::assertSame(400, $e->status);
             self::assertCount(1, $mock->getRequests(), 'must not retry on 400');
         }
+    }
+
+    public function testErrorBodyErrorFieldIsTheCodeAndDetailIsTheMessage(): void
+    {
+        [$client, $mock, $factory] = $this->makeClientWithMock(maxRetries: 3);
+        $mock->addResponse(
+            $factory->createResponse(404)
+                ->withHeader('X-Request-Id', 'req_404')
+                ->withBody($factory->createStream(json_encode([
+                    'error' => 'TEMPLATE_NOT_FOUND',
+                    'detail' => 'Template "does-not-exist" not found in project "getting-started"',
+                    'requestId' => 'req_404',
+                ], flags: JSON_THROW_ON_ERROR))),
+        );
+
+        try {
+            $client->render->document(new RenderInput(project: 'getting-started', template: 'does-not-exist', data: []));
+            self::fail('Expected NotFoundException');
+        } catch (NotFoundException $e) {
+            self::assertSame(PoliPageException::TEMPLATE_NOT_FOUND, $e->errorCode);
+            self::assertSame('Template "does-not-exist" not found in project "getting-started"', $e->getMessage());
+            self::assertSame(404, $e->status);
+            self::assertSame('req_404', $e->requestId);
+            self::assertCount(1, $mock->getRequests(), 'must not retry on 404');
+        }
+    }
+
+    public function testUnknownErrorCodePassesThroughVerbatim(): void
+    {
+        [$client, $mock, $factory] = $this->makeClientWithMock();
+        $mock->addResponse(
+            $factory->createResponse(409)->withBody($factory->createStream(json_encode([
+                'error' => 'SOME_CODE_ADDED_LATER',
+                'detail' => 'a code this SDK version does not know',
+            ], flags: JSON_THROW_ON_ERROR))),
+        );
+
+        try {
+            $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
+            self::fail('Expected ApiStatusException');
+        } catch (ApiStatusException $e) {
+            self::assertSame('SOME_CODE_ADDED_LATER', $e->errorCode);
+            self::assertSame('a code this SDK version does not know', $e->getMessage());
+            self::assertSame(409, $e->status);
+        }
+    }
+
+    public function testPublishInProgressIsRetriedAfterRetryAfterAndSurfacesOnceRetriesAreExhausted(): void
+    {
+        $events = [];
+        [$client, $mock, $factory] = $this->makeClientWithMock(
+            maxRetries: 1,
+            onRetry: function (RetryEvent $event) use (&$events): void {
+                $events[] = $event;
+            },
+        );
+        for ($i = 0; $i < 2; ++$i) {
+            $mock->addResponse(
+                $factory->createResponse(503)
+                    ->withHeader('Retry-After', '1')
+                    ->withBody($factory->createStream(json_encode([
+                        'error' => 'PUBLISH_IN_PROGRESS',
+                        'detail' => 'A publish of this project is in progress',
+                    ], flags: JSON_THROW_ON_ERROR))),
+            );
+        }
+
+        $started = microtime(true);
+        try {
+            $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
+            self::fail('Expected InternalServerException');
+        } catch (InternalServerException $e) {
+            self::assertSame(PoliPageException::PUBLISH_IN_PROGRESS, $e->errorCode);
+            self::assertSame(503, $e->status);
+            self::assertTrue($e->isRetryable());
+        }
+
+        self::assertCount(2, $mock->getRequests());
+        self::assertCount(1, $events);
+        self::assertSame(1000.0, $events[0]->delayMs);
+        self::assertSame(PoliPageException::PUBLISH_IN_PROGRESS, $events[0]->reason->errorCode);
+        self::assertGreaterThanOrEqual(1.0, microtime(true) - $started);
+    }
+
+    public function testThumbnailsWithoutOptionsSendsAnEmptyJsonObject(): void
+    {
+        [$client, $mock, $factory] = $this->makeClientWithMock();
+        $mock->addResponse(
+            $factory->createResponse(200)->withBody($factory->createStream('{"thumbnails":[]}')),
+        );
+
+        self::assertSame([], $client->documents->thumbnails('doc_abc'));
+
+        $request = $mock->getLastRequest();
+        self::assertInstanceOf(RequestInterface::class, $request);
+        self::assertSame('POST', $request->getMethod());
+        self::assertStringEndsWith('/v1/documents/doc_abc/thumbnails', (string) $request->getUri());
+        self::assertSame('{}', (string) $request->getBody());
+    }
+
+    public function testDeleteResolvesOn204IncludingForAnAlreadyDeletedDocument(): void
+    {
+        [$client, $mock, $factory] = $this->makeClientWithMock();
+        $mock->addResponse($factory->createResponse(204));
+        $mock->addResponse($factory->createResponse(204));
+
+        $client->documents->delete('doc_abc');
+        $client->documents->delete('doc_abc');
+
+        self::assertCount(2, $mock->getRequests());
+        self::assertSame('DELETE', $mock->getRequests()[1]->getMethod());
     }
 
     public function testRetriesOnNetworkErrorAndThrowsConnectionExceptionWhenExhausted(): void
@@ -180,7 +284,7 @@ final class PoliPageTest extends TestCase
         $mock->addException($networkException);
 
         try {
-            $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+            $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
             self::fail('Expected ConnectionException');
         } catch (ConnectionException $e) {
             self::assertSame(PoliPageException::NETWORK_ERROR, $e->errorCode);
@@ -200,12 +304,10 @@ final class PoliPageTest extends TestCase
         );
         $mock->addResponse($factory->createResponse(503));
         $mock->addResponse(
-            $factory->createResponse(200)->withBody($factory->createStream(json_encode([
-                'html' => '', 'totalPages' => 0, 'environment' => 'sandbox',
-            ], flags: JSON_THROW_ON_ERROR))),
+            $factory->createResponse(200)->withBody($factory->createStream(DocumentWire::descriptorJson())),
         );
 
-        $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+        $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
 
         self::assertCount(1, $events);
         self::assertSame(2, $events[0]->attempt);
@@ -224,7 +326,7 @@ final class PoliPageTest extends TestCase
         $mock->addResponse($factory->createResponse(401));
 
         try {
-            $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+            $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
         } catch (PoliPageException) {
             // expected
         }
@@ -240,15 +342,13 @@ final class PoliPageTest extends TestCase
         );
         $mock->addResponse($factory->createResponse(503));
         $mock->addResponse(
-            $factory->createResponse(200)->withBody($factory->createStream(json_encode([
-                'html' => '', 'totalPages' => 0, 'environment' => 'sandbox',
-            ], flags: JSON_THROW_ON_ERROR))),
+            $factory->createResponse(200)->withBody($factory->createStream(DocumentWire::descriptorJson())),
         );
 
-        $result = $client->render->preview(new ProjectModeInput(project: 'p', template: 't', data: []));
+        $result = $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
 
         // If the hook exception had escaped, this assertion would never run.
-        self::assertSame('', $result->html);
+        self::assertSame('doc_abc', $result->documentId);
     }
 
     /**
@@ -265,7 +365,7 @@ final class PoliPageTest extends TestCase
         $factory = new Psr17Factory();
         $mock = new MockClient();
         $client = new PoliPage(
-            apiKey: 'pp_test_xyz',
+            apiKey: 'pp_sandbox_xyz',
             maxRetries: $maxRetries,
             retryDelay: 0.0,
             httpClient: $mock,
@@ -284,7 +384,7 @@ final class PoliPageTest extends TestCase
      */
     private function makeNetworkException(Psr17Factory $factory): \RuntimeException
     {
-        return new class ($factory->createRequest('POST', 'https://api.poli.page/v1/render/preview')) extends \RuntimeException implements NetworkExceptionInterface {
+        return new class ($factory->createRequest('POST', 'https://api.poli.page/v1/render')) extends \RuntimeException implements NetworkExceptionInterface {
             public function __construct(private RequestInterface $request)
             {
                 parent::__construct('connection refused');
