@@ -30,7 +30,7 @@ try {
 These originate inside the SDK before any HTTP call (or in response to a network-layer failure). They are lowercase.
 
 <ErrorTable errors={[
-  { code: 'invalid_options', when: 'Constructor arguments are missing or malformed (empty apiKey, undiscoverable PSR-18 client).', recovery: 'Fix the call site. Thrown synchronously.' },
+  { code: 'invalid_options', when: 'Constructor arguments are missing or malformed (empty apiKey, undiscoverable PSR-18 client), or, at request time, apiKey or idempotencyKey is not a valid HTTP header value (a trailing newline or another control character). The message never contains the key.', recovery: 'Fix the call site. Not retried.' },
   { code: 'network_error', when: 'TCP/TLS-layer failure reaching the API. Surfaced via Exception\\ConnectionException.', recovery: 'Automatically retried up to maxRetries times.' },
   { code: 'timeout', when: 'The request did not complete within the configured `timeout`. Surfaced via Exception\\TimeoutException.', recovery: 'Automatically retried up to maxRetries times. Raise `timeout` if it keeps tripping.' },
   { code: 'aborted', when: 'A future cancellation primitive aborted the request.', recovery: 'Not retryable. Surface to the caller.' },

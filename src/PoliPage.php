@@ -49,6 +49,9 @@ use Psr\Log\NullLogger;
  */
 final class PoliPage implements Transport
 {
+    /** RFC 7230 field-value; `\z` because `$` also matches before a final "\n". */
+    private const HEADER_VALUE_PATTERN = '/^[\x20\x09\x21-\x7E\x80-\xFF]*\z/';
+
     public readonly Render $render;
     public readonly Documents $documents;
 
@@ -339,9 +342,28 @@ final class PoliPage implements Transport
         float $timeout,
         int $attemptNumber,
     ): SendOnceResult {
+        // Why: PSR-7 and transport errors about a bad header value echo the
+        // value, which for Authorization is the key. These errors carry a
+        // fixed message and no previous exception so the key never reaches
+        // logs, onError or toPayload().
+        if (preg_match(self::HEADER_VALUE_PATTERN, $this->apiKey) !== 1) {
+            return new SendOnceResult(null, new PoliPageException(
+                'apiKey contains characters that are not allowed in an HTTP header '
+                . '(such as a trailing newline or another control character)',
+                PoliPageException::INVALID_OPTIONS,
+            ), null, false);
+        }
         $request = $this->requestFactory->createRequest($method, $url);
-        foreach (Headers::build($method, $this->apiKey, $idempotencyKey, $this->userAgent) as $name => $value) {
-            $request = $request->withHeader($name, $value);
+        try {
+            foreach (Headers::build($method, $this->apiKey, $idempotencyKey, $this->userAgent) as $name => $value) {
+                $request = $request->withHeader($name, $value);
+            }
+        } catch (\InvalidArgumentException) {
+            return new SendOnceResult(null, new PoliPageException(
+                'A request header value contains characters that are not allowed in an HTTP header '
+                . '(such as a newline or another control character in idempotencyKey)',
+                PoliPageException::INVALID_OPTIONS,
+            ), null, false);
         }
         if ($bodyJson !== null) {
             $request = $request->withBody($this->streamFactory->createStream($bodyJson));

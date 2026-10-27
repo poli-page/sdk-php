@@ -25,7 +25,7 @@ A key is `pp_{env}_{32 lowercase hex}`, where `{env}` is the name of the key's e
 
 "Counted" means the render counts toward the organization's monthly PDF quota. `sandbox` documents expire 30 days after creation. There is no watermark option: a template that wants a watermark outside `sandbox` uses the `poli-watermark` class.
 
-The SDK passes the key through as-is and never checks it client-side; the API rejects an unknown key with `401 INVALID_API_KEY`.
+The SDK passes the key through as-is and does not check its format; the API rejects an unknown key with `401 INVALID_API_KEY`. The one client-side check is that the key is a valid HTTP header value: a key with a control character (often a trailing newline from a `.env` value or a secret file) fails before any request is built with a `PoliPageException` (`invalid_options`) whose message never contains the key.
 
 Pass the key to the client factory:
 
