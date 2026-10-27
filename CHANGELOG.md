@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- An API key that is not a valid HTTP header value (a trailing newline
+  from a `.env` value or a secret file, `\r\n` inside, NUL or another
+  control character other than tab) no longer leaks into an exception
+  message. Before any request is built, it now fails with a `PoliPageException`
+  (`invalid_options`) whose fixed message never contains the key, with
+  no previous exception, and `onError` fires once. Before, guzzlehttp/psr7
+  2.x echoed the whole `Bearer` value in a raw `InvalidArgumentException`,
+  and with nyholm/psr7 + Symfony HttpClient the key reached a
+  `ConnectionException` message, its `toPayload()`, its previous chain
+  and `onError`. A caller-supplied `idempotencyKey` is checked the same
+  way: one with a trailing newline no longer reaches the transport as a
+  retried `network_error` whose message echoes it. A PSR-7
+  `withHeader()` rejection of a value that passes this check (by an
+  implementation stricter than RFC 7230) is rethrown the same way,
+  without the original message (#31).
+
 ## [0.10.0] - 2026-10-26
 
 Environments: an API key belongs to one environment (`pp_sandbox_…`,

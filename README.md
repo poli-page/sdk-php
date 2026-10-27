@@ -189,7 +189,7 @@ An API key belongs to exactly one environment of your organization, and every re
 
 "Counted" means the render counts toward the organization's monthly PDF quota. `sandbox` renders are watermarked and not counted, and `sandbox` documents expire 30 days after creation. There is no watermark option: a template that wants a watermark outside `sandbox` uses the `poli-watermark` class.
 
-Every key hits the same endpoint (`https://api.poli.page`). Standard and service keys share this one format. The SDK passes the key through as a Bearer token and never inspects or validates it client-side — the API answers `401 INVALID_API_KEY` to a key it does not know.
+Every key hits the same endpoint (`https://api.poli.page`). Standard and service keys share this one format. The SDK passes the key through as a Bearer token and does not check its format — the API answers `401 INVALID_API_KEY` to a key it does not know. The one client-side check is that the key is a valid HTTP header value: a key with CR, LF, NUL or another control character other than tab (often a trailing newline from a `.env` value or a secret file) fails before any request is built with a `PoliPageException` (`invalid_options`) whose message never contains the key.
 
 ## Methods
 

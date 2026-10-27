@@ -43,6 +43,8 @@ $pdf = $client->render->pdf(new RenderInput(
 
 Same input + same key → same stored document. Different key with same data → new document.
 
+The key is sent as an HTTP header, so it must be a valid header value. A key with CR, LF, NUL or another control character other than tab fails before any request is built with a `PoliPageException` (`invalid_options`) whose message never contains the key. It is not retried.
+
 ## Example
 
 ```php
