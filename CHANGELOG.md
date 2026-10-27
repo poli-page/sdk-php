@@ -7,25 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Security
-
-- An API key that is not a valid HTTP header value (a trailing newline
-  from a `.env` value or a secret file, `\r\n` inside, NUL or another
-  control character other than tab) no longer leaks into an exception
-  message. Before any request is built, it now fails with a `PoliPageException`
-  (`invalid_options`) whose fixed message never contains the key, with
-  no previous exception, and `onError` fires once. Before, guzzlehttp/psr7
-  2.x echoed the whole `Bearer` value in a raw `InvalidArgumentException`,
-  and with nyholm/psr7 + Symfony HttpClient the key reached a
-  `ConnectionException` message, its `toPayload()`, its previous chain
-  and `onError`. A caller-supplied `idempotencyKey` is checked the same
-  way: one with a trailing newline no longer reaches the transport as a
-  retried `network_error` whose message echoes it. A PSR-7
-  `withHeader()` rejection of a value that passes this check (by an
-  implementation stricter than RFC 7230) is rethrown the same way,
-  without the original message (#31).
-
-## [0.10.0] - 2026-10-26
+## [0.10.0] - 2026-10-27
 
 Environments: an API key belongs to one environment (`pp_sandbox_…`,
 `pp_live_…`, `pp_staging_…`) and a render uses the project's copy
@@ -83,6 +65,24 @@ published in that environment. Breaking, with no deprecation window.
   passed through unchanged. A `503 PUBLISH_IN_PROGRESS` (a render that
   waited on a publish) is retried like any other 5xx, honouring
   `Retry-After`.
+
+### Security
+
+- An API key that is not a valid HTTP header value (a trailing newline
+  from a `.env` value or a secret file, `\r\n` inside, NUL or another
+  control character other than tab) no longer leaks into an exception
+  message. Before any request is built, it now fails with a `PoliPageException`
+  (`invalid_options`) whose fixed message never contains the key, with
+  no previous exception, and `onError` fires once. Before, guzzlehttp/psr7
+  2.x echoed the whole `Bearer` value in a raw `InvalidArgumentException`,
+  and with nyholm/psr7 + Symfony HttpClient the key reached a
+  `ConnectionException` message, its `toPayload()`, its previous chain
+  and `onError`. A caller-supplied `idempotencyKey` is checked the same
+  way: one with a trailing newline no longer reaches the transport as a
+  retried `network_error` whose message echoes it. A PSR-7
+  `withHeader()` rejection of a value that passes this check (by an
+  implementation stricter than RFC 7230) is rethrown the same way,
+  without the original message (#31).
 
 ## [0.9.0] - 2026-06-22
 
