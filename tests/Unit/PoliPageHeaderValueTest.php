@@ -8,6 +8,7 @@ use GuzzleHttp\Client as GuzzleClient;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\HttpFactory;
+use GuzzleHttp\Psr7\Request as GuzzleRequest;
 use GuzzleHttp\Psr7\Response;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -17,14 +18,16 @@ use PoliPage\PoliPage;
 use PoliPage\PoliPageException;
 use PoliPage\RenderInput;
 use PoliPage\Tests\Support\DocumentWire;
+use Psr\Http\Message\MessageInterface;
+use Psr\Http\Message\RequestFactoryInterface;
 use Psr\Http\Message\RequestInterface;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Psr18Client;
 use Symfony\Component\HttpClient\Response\MockResponse;
 
 /**
- * A key that is not a valid HTTP header value must fail as a
- * PoliPageException that never carries the key. Both stacks matter:
+ * An apiKey or idempotencyKey that is not a valid HTTP header value must
+ * fail as a PoliPageException that never carries the value. Both stacks matter:
  * Guzzle PSR-7 rejects the value in withHeader() (and guzzlehttp/psr7 2.x
  * echoes it in that message), while nyholm/psr7 lets a trailing "\n"
  * through and Symfony HttpClient then echoes the whole header in a
@@ -47,6 +50,23 @@ final class PoliPageHeaderValueTest extends TestCase
             'trailing CRLF' => self::VALID_KEY . "\r\n",
             'NUL' => self::VALID_KEY . "\0",
             'DEL' => self::VALID_KEY . "\x7F",
+        ];
+        foreach (self::stacks() as $stack) {
+            foreach ($keys as $name => $key) {
+                yield "{$name} on {$stack}" => [$stack, $key];
+            }
+        }
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function invalidIdempotencyKeyOnEachStack(): iterable
+    {
+        $keys = [
+            'trailing LF' => 'idem-' . self::SECRET . "\n",
+            'CRLF inside' => 'idem-' . self::SECRET . "\r\nX-Injected: 1",
+            'NUL' => 'idem-' . self::SECRET . "\0",
         ];
         foreach (self::stacks() as $stack) {
             foreach ($keys as $name => $key) {
@@ -99,16 +119,21 @@ final class PoliPageHeaderValueTest extends TestCase
         self::assertSame(0, $sentCount());
     }
 
-    #[DataProvider('eachStack')]
-    public function testHeaderValueRejectedByPsr7IsRethrownWithoutTheOriginalMessage(string $stack): void
-    {
-        $idempotencyKey = "idem\r\nX-Injected: 1";
+    #[DataProvider('invalidIdempotencyKeyOnEachStack')]
+    public function testIdempotencyKeyThatIsNotAValidHeaderValueFailsWithAFixedMessageBeforeAnyRequest(
+        string $stack,
+        string $idempotencyKey,
+    ): void {
         $errors = [];
+        $requestEvents = 0;
         [$client, $sentCount] = $this->makeClient(
             $stack,
             self::VALID_KEY,
             onError: static function (PoliPageException $e) use (&$errors): void {
                 $errors[] = $e;
+            },
+            onRequest: static function () use (&$requestEvents): void {
+                ++$requestEvents;
             },
         );
 
@@ -121,14 +146,75 @@ final class PoliPageHeaderValueTest extends TestCase
 
         self::assertSame(PoliPageException::INVALID_OPTIONS, $error->errorCode);
         self::assertSame(
-            'A request header value contains characters that are not allowed in an HTTP header '
-            . '(such as a newline or another control character in idempotencyKey)',
+            'idempotencyKey contains characters that are not allowed in an HTTP header '
+            . '(such as a trailing newline or another control character)',
+            $error->getMessage(),
+        );
+        self::assertNull($error->status);
+        self::assertNull($error->getPrevious());
+        self::assertKeyNeverSurfaces($error, $idempotencyKey);
+        self::assertSame([$error], $errors, 'onError fires once, with the thrown exception');
+        self::assertSame(0, $requestEvents, 'no request is built');
+        self::assertSame(0, $sentCount());
+    }
+
+    public function testHeaderValueRejectedByAStricterPsr7IsRethrownWithoutTheOriginalMessage(): void
+    {
+        // Why: "\xFF" passes the RFC 7230 check, but some PSR-7
+        // implementations reject it in withHeader() and echo the value.
+        $idempotencyKey = "idem-\xFF-" . self::SECRET;
+        $errors = [];
+        $factory = new Psr17Factory();
+        $strictRequests = new class () implements RequestFactoryInterface {
+            public function createRequest(string $method, $uri): RequestInterface
+            {
+                return new class ($method, $uri) extends GuzzleRequest {
+                    /**
+                     * @param string          $name
+                     * @param string|string[] $value
+                     */
+                    public function withHeader($name, $value): MessageInterface
+                    {
+                        if (is_string($value) && preg_match('/[^\x09\x20-\x7E]/', $value) === 1) {
+                            throw new \InvalidArgumentException(sprintf('"%s" is not valid header value', $value));
+                        }
+
+                        return parent::withHeader($name, $value);
+                    }
+                };
+            }
+        };
+        $client = new PoliPage(
+            apiKey: self::VALID_KEY,
+            maxRetries: 2,
+            retryDelay: 0.0,
+            httpClient: new Psr18Client(new MockHttpClient(static function (): MockResponse {
+                self::fail('No request may reach the transport');
+            }), $factory, $factory),
+            requestFactory: $strictRequests,
+            streamFactory: $factory,
+            onError: static function (PoliPageException $e) use (&$errors): void {
+                $errors[] = $e;
+            },
+            jitterSource: static fn (): float => 0.0,
+        );
+
+        $error = $this->renderAndCatch($client, new RenderInput(
+            project: 'p',
+            template: 't',
+            data: [],
+            idempotencyKey: $idempotencyKey,
+        ));
+
+        self::assertSame(PoliPageException::INVALID_OPTIONS, $error->errorCode);
+        self::assertSame(
+            'A request header value was rejected by the PSR-7 implementation '
+            . '(apiKey or idempotencyKey contains a byte it does not accept)',
             $error->getMessage(),
         );
         self::assertNull($error->getPrevious());
         self::assertKeyNeverSurfaces($error, $idempotencyKey);
         self::assertSame([$error], $errors, 'onError fires once, with the thrown exception');
-        self::assertSame(0, $sentCount());
     }
 
     #[DataProvider('eachStack')]

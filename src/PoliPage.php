@@ -343,15 +343,19 @@ final class PoliPage implements Transport
         int $attemptNumber,
     ): SendOnceResult {
         // Why: PSR-7 and transport errors about a bad header value echo the
-        // value, which for Authorization is the key. These errors carry a
-        // fixed message and no previous exception so the key never reaches
+        // value, which for Authorization is the key. Some PSR-7 versions let
+        // a trailing "\n" through withHeader() and the transport then fails
+        // with a retryable error that echoes it. These errors carry a fixed
+        // message and no previous exception so the value never reaches
         // logs, onError or toPayload().
-        if (preg_match(self::HEADER_VALUE_PATTERN, $this->apiKey) !== 1) {
-            return new SendOnceResult(null, new PoliPageException(
-                'apiKey contains characters that are not allowed in an HTTP header '
-                . '(such as a trailing newline or another control character)',
-                PoliPageException::INVALID_OPTIONS,
-            ), null, false);
+        foreach (['apiKey' => $this->apiKey, 'idempotencyKey' => $idempotencyKey] as $option => $value) {
+            if ($value !== null && preg_match(self::HEADER_VALUE_PATTERN, $value) !== 1) {
+                return new SendOnceResult(null, new PoliPageException(
+                    $option . ' contains characters that are not allowed in an HTTP header '
+                    . '(such as a trailing newline or another control character)',
+                    PoliPageException::INVALID_OPTIONS,
+                ), null, false);
+            }
         }
         $request = $this->requestFactory->createRequest($method, $url);
         try {
@@ -359,9 +363,11 @@ final class PoliPage implements Transport
                 $request = $request->withHeader($name, $value);
             }
         } catch (\InvalidArgumentException) {
+            // Why: a PSR-7 implementation stricter than RFC 7230 (one that
+            // rejects bytes 0x80-0xFF, say) still echoes the value here.
             return new SendOnceResult(null, new PoliPageException(
-                'A request header value contains characters that are not allowed in an HTTP header '
-                . '(such as a newline or another control character in idempotencyKey)',
+                'A request header value was rejected by the PSR-7 implementation '
+                . '(apiKey or idempotencyKey contains a byte it does not accept)',
                 PoliPageException::INVALID_OPTIONS,
             ), null, false);
         }
