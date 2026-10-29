@@ -28,7 +28,7 @@ final class RetryAfterParser
             return null;
         }
 
-        if (ctype_digit($value)) {
+        if (preg_match('/^[0-9]+$/D', $value) === 1) {
             // Clamp on the digit count first: a value too large for an int
             // would saturate or wrap when cast, and any such value is past
             // the cap anyway.
