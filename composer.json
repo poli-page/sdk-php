@@ -54,7 +54,7 @@
         }
     },
     "scripts": {
-        "test": "phpunit --testsuite=unit",
+        "test": "phpunit --testsuite=unit,contract",
         "test:integration": "phpunit --testsuite=integration",
         "lint": "php-cs-fixer fix --dry-run --diff",
         "format": "php-cs-fixer fix",
