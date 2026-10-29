@@ -228,7 +228,7 @@ $client = new PoliPage(
 | `baseUrl` | `?string` | `https://api.poli.page` | API base URL |
 | `maxRetries` | `?int` | `2` | Max retry attempts on retryable errors |
 | `retryDelay` | `?float` (seconds) | `0.5` | Base delay before the first retry |
-| `timeout` | `?float` (seconds) | `60.0` | Per-request timeout hint forwarded to the PSR-18 client |
+| `timeout` | `?float` (seconds) | `60.0` | Per-attempt timeout, applied per request with Guzzle and Symfony HTTP Client |
 | `httpClient` | `?Psr\Http\Client\ClientInterface` | (auto-discovered) | Override the discovered PSR-18 client |
 | `requestFactory` | `?Psr\Http\Message\RequestFactoryInterface` | (auto-discovered) | Override the discovered PSR-17 request factory |
 | `streamFactory` | `?Psr\Http\Message\StreamFactoryInterface` | (auto-discovered) | Override the discovered PSR-17 stream factory |
@@ -325,7 +325,7 @@ PHP has no first-class cancellation primitive (no `AbortSignal`, no `context.Con
 - `timeout:` on the constructor — applied as the per-request deadline for every call.
 - `timeout:` on the input object (`RenderInput`) — overrides the client default for that one call.
 
-PSR-18 does not standardise per-request timeouts, so the SDK forwards the value to the underlying client where it can (Guzzle's request options) and otherwise documents it as a best-effort hint. With any other PSR-18 client, Symfony HTTP Client included, configure the timeout on the client you inject.
+PSR-18 does not standardise per-request timeouts, so the SDK applies the value through the client's own per-request options: Guzzle's request options, and Symfony HTTP Client's `withOptions()` (`max_duration` and the idle `timeout`; symfony/http-client 6.2 or later). With any other PSR-18 client the value cannot reach the client: configure the timeout on the client you inject.
 
 ## Observability
 
@@ -367,7 +367,7 @@ For per-request / per-response inspection, install middleware on your injected P
 
 ## Retries & idempotency
 
-The SDK retries on **5xx**, **429**, **network errors**, and **timeouts**, except `QUOTA_EXCEEDED`, `OVERAGE_CAP_EXCEEDED` (429) and `STORAGE_ACCESS_DENIED` (502), which waiting cannot fix: those are thrown at once. Before retry `n` (1-based) the SDK waits `retryDelay × 2^(n-1) × j`, with `j` a random factor in `[0.5, 1.5)`; a `Retry-After` header (integer seconds or HTTP-date, clamped to 30 s) replaces it when the server sends one. `Retry-After-Ms` is ignored. The presigned-URL download is never retried. With Guzzle or Symfony HttpClient a POST always opens a fresh connection, so libcurl never resends it behind the SDK's back. Every `POST` sends an auto-generated `Idempotency-Key` (UUID v4), the same on every retry of that call; pass `idempotencyKey:` in the input to override. The API does not deduplicate on it, so a render retried after a late 5xx, a `timeout` or a `network_error` can store a second document.
+The SDK retries on **5xx**, **429**, **network errors**, and **timeouts**, except `QUOTA_EXCEEDED`, `OVERAGE_CAP_EXCEEDED` (429) and `STORAGE_ACCESS_DENIED` (502), which waiting cannot fix: those are thrown at once. Before retry `n` (1-based) the SDK waits `retryDelay × 2^(n-1) × j`, with `j` a random factor in `[0.5, 1.5)`; a `Retry-After` header (integer seconds or HTTP-date, clamped to 30 s) replaces it when the server sends one. `Retry-After-Ms` is ignored. The presigned-URL download is never retried. With Guzzle or Symfony HttpClient a POST always opens a fresh connection, so libcurl never resends it behind the SDK's back (with Symfony, that request option takes the place of any `extra.curl` default of your client on the SDK's POSTs). Every `POST` sends an auto-generated `Idempotency-Key` (UUID v4), the same on every retry of that call; pass `idempotencyKey:` in the input to override. The API does not deduplicate on it, so a render retried after a late 5xx, a `timeout` or a `network_error` can store a second document.
 
 ## Type system
 

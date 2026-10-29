@@ -9,7 +9,7 @@ The `PoliPage` constructor accepts named arguments. Every parameter is optional 
 
 - `apiKey` (required) — the API key of the environment to render in. See [Authentication](../authentication/) for its format.
 - `baseUrl` — override the API endpoint. Defaults to `https://api.poli.page`.
-- `timeout` — per-request timeout in seconds. Defaults to `60.0`.
+- `timeout` — per-attempt timeout in seconds. Defaults to `60.0`. Applied per request with Guzzle and Symfony HTTP Client (6.2 or later); with another PSR-18 client, set it on the client you inject.
 - `maxRetries` — maximum retry attempts for retryable errors. Defaults to `2` (three total attempts).
 - `retryDelay` — initial retry backoff in seconds. Defaults to `0.5`. Doubles each attempt.
 - `httpClient` — a PSR-18 `ClientInterface`. If omitted, the SDK uses `Psr18ClientDiscovery::find()`.

@@ -19,7 +19,6 @@ use PoliPage\Thumbnail;
 use PoliPage\ThumbnailOptions;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\StreamInterface;
-use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Component\HttpClient\Psr18Client;
 
 /**
@@ -101,12 +100,11 @@ final class CaseInvoker
 
     private function httpClient(string $name): ClientInterface
     {
+        // Neither client gets a timeout of its own: the case's timeoutMs
+        // reaches them through the SDK's `timeout` option only.
         return match ($name) {
             'guzzle' => new GuzzleClient(),
-            // The SDK applies its per-attempt timeout through Guzzle's request
-            // options only; with any other PSR-18 client the timeout is set
-            // on the client, as the README says.
-            'symfony' => new Psr18Client(HttpClient::create(['timeout' => $this->case->timeoutMs / 1000])),
+            'symfony' => new Psr18Client(),
             default => throw new ContractException('Unknown HTTP client ' . $name),
         };
     }

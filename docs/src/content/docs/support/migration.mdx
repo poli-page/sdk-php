@@ -13,6 +13,7 @@ The SDK now follows the retry policy and the error messages of the [Poli Page AP
 - The predicates read `status` and `errorCode`: a `DOWNLOAD_FAILED` with the storage's 403 is an auth error.
 - A timeout of the presigned-URL download raises `DOWNLOAD_FAILED`, not `TimeoutException`.
 - `Retry-After` is read as integer seconds or an HTTP-date only; `Retry-After-Ms` is ignored.
+- The package conflicts with symfony/http-client older than 6.2; with Symfony HTTP Client the SDK's `timeout` now bounds each attempt.
 - The SDK-side messages are the specification's exact texts (`Network request failed`, `Request timed out after <ms>ms`, `Failed to download PDF: HTTP <status>`, `Failed to download PDF: network error`, `HTTP <status>` for an error body that is not JSON, `project is required`). Match `errorCode`, not the message. See [Errors](../../production/errors/).
 
 ## From 0.9.x

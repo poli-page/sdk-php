@@ -16,7 +16,7 @@ The Poli Page PHP SDK retries transient failures automatically. Every POST carri
 - The presigned-URL download (`downloadPdf()`, and the second hop of `render->pdf()` / `render->pdfStream()`) is never retried.
 - `aborted` (caller-cancelled) is never retried.
 
-The SDK's retries are the only resends. With Guzzle or Symfony HttpClient, a POST always opens a fresh connection, so libcurl never resends it on its own when a reused keep-alive connection dies before any answer: that failure is a `network_error`, counted by `maxRetries` and reported to `onRequest` and `onRetry` like any other attempt. With another PSR-18 client, check whether it resends requests itself.
+The SDK's retries are the only resends. With Guzzle or Symfony HttpClient, a POST always opens a fresh connection, so libcurl never resends it on its own when a reused keep-alive connection dies before any answer: that failure is a `network_error`, counted by `maxRetries` and reported to `onRequest` and `onRetry` like any other attempt. With Symfony HttpClient, that request option takes the place of any `extra.curl` default you set on your client, for the SDK's POSTs only. With another PSR-18 client, check whether it resends requests itself.
 
 ## Disabling retries
 

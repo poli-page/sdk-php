@@ -68,6 +68,20 @@ A timeout of the presigned-URL download (`downloadPdf()`, the second hop of
 around `render->pdf()` no longer sees it: catch `PoliPageException` and
 test `errorCode`.
 
+### symfony/http-client 6.2 or later
+
+The package now conflicts with symfony/http-client older than 6.2: the SDK
+applies its `timeout` and its fresh-connection option per request through
+`Psr18Client::withOptions()`, added in 6.2. On 5.4 to 6.1, upgrade:
+
+```bash
+composer require symfony/http-client:^6.4
+```
+
+or inject Guzzle as the PSR-18 client. With Symfony, the SDK's `timeout` now
+bounds each attempt (it had no effect before), so drop any timeout you set
+on the Symfony client only to stand in for it.
+
 ### Messages
 
 If you match error messages, match `errorCode` instead: the SDK-side

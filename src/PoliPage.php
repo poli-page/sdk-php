@@ -414,12 +414,14 @@ final class PoliPage implements Transport
             url: $url,
             attempt: $attemptNumber,
         ));
-        $startedAt = microtime(true);
+        $startedAt = hrtime(true);
 
         try {
             $response = TimeoutPolicy::send($this->httpClient, $request, $timeout);
         } catch (ClientExceptionInterface $e) {
             return new SendOnceResult(null, self::transportError($e, $timeout));
+        } catch (PoliPageException $e) {
+            return new SendOnceResult(null, $e);
         }
 
         $status = $response->getStatusCode();
@@ -452,7 +454,7 @@ final class PoliPage implements Transport
             return self::errorResult($response, ExceptionClassifier::fromStatus($code, $status, $message, $requestId));
         }
 
-        $durationMs = (microtime(true) - $startedAt) * 1000.0;
+        $durationMs = (hrtime(true) - $startedAt) / 1e6;
         $this->logger->info('polipage: response ok', [
             'method' => $method,
             'path' => $path,

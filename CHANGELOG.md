@@ -43,6 +43,21 @@ Conformance with the Poli Page API contract v1.2.0
   as a float or by `strtotime()`; an integer too large for PHP's `int`
   clamps to the 30 s cap; an HTTP-date's delay keeps sub-second precision.
   `Retry-After-Ms` is ignored, as before.
+- **Breaking:** the package conflicts with symfony/http-client older than
+  6.2. The SDK applies its per-request options through
+  `Psr18Client::withOptions()`, which 6.2 added; without it, an install
+  that bypassed the conflict gets `invalid_options` on each request rather
+  than a request without its timeout. Symfony 5.4 to 6.1 users upgrade
+  symfony/http-client, or inject Guzzle.
+- The SDK's `timeout` now applies with Symfony HttpClient: each attempt
+  gets `max_duration` (the total bound) and Symfony's idle `timeout` set
+  to it. Before, the option had no effect with Symfony: an attempt waited
+  the client's own idle timeout (`default_socket_timeout`, 60 s by default)
+  with no total bound, and the `timeout` error still named the SDK's
+  value. A timeout is now also recognised by the exception's class
+  (Guzzle 8's typed exceptions, Symfony's `TimeoutException`) and by
+  Symfony's "Max duration" message, and no longer by any message that
+  merely contains "timeout" (a host named `timeout.example.com`).
 - The backoff's random factor is in `[0.5, 1.5)` (it could reach 1.5).
 - SDK error messages are the exact texts of the SDK specification:
   - `network_error`: `Network request failed` (was the HTTP library's
@@ -103,8 +118,9 @@ Conformance with the Poli Page API contract v1.2.0
   deduplicates on `Idempotency-Key`. It does not: the key is stable
   across the retries of one call, and a render retried after a late 5xx,
   a `timeout` or a `network_error` can store a second document. The
-  README no longer says the SDK applies its `timeout` to Symfony
-  HttpClient: it does so through Guzzle's request options only.
+  `downloadPdf()` docblock no longer promises a `TimeoutException`, and
+  says what a `null` timeout means: the injected client's own timeout,
+  none at all with Guzzle's defaults.
 
 ### Added
 

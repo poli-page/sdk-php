@@ -21,7 +21,6 @@ use PoliPage\Tests\Contract\MockServer;
 use PoliPage\Tests\Contract\RecordedRequest;
 use PoliPage\Tests\Support\DocumentWire;
 use Psr\Http\Client\ClientInterface;
-use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Component\HttpClient\Psr18Client;
 
 /**
@@ -30,6 +29,9 @@ use Symfony\Component\HttpClient\Psr18Client;
  * resend would be invisible to the SDK and, as the API does not deduplicate
  * on Idempotency-Key, could store a render twice. Against a real local
  * server with keep-alive, through Guzzle and Symfony HttpClient.
+ *
+ * In the unit suite although it starts a server process (the contract
+ * suite's MockServer): it guards SDK behaviour and needs no contract file.
  */
 #[CoversClass(TimeoutPolicy::class)]
 #[RequiresPhpExtension('curl')]
@@ -125,7 +127,7 @@ final class NoHiddenResendTest extends TestCase
 
     private function httpClient(string $name): ClientInterface
     {
-        return $name === 'guzzle' ? new GuzzleClient() : new Psr18Client(HttpClient::create(['timeout' => 5]));
+        return $name === 'guzzle' ? new GuzzleClient() : new Psr18Client();
     }
 
     /**
