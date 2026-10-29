@@ -59,6 +59,13 @@ the same way, test the code first:
 }
 ```
 
+### `DOWNLOAD_FAILED` is never retryable
+
+`isRetryable()` is `false` for every `DOWNLOAD_FAILED`, whatever the storage
+status; it was `true` for a storage 5xx or 429. A queue that requeues on
+`isRetryable()` now drops it at once: call `documents->get($id)` for a fresh
+presigned URL and download again.
+
 ### A download timeout is `DOWNLOAD_FAILED`
 
 A timeout of the presigned-URL download (`downloadPdf()`, the second hop of
