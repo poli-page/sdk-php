@@ -34,7 +34,8 @@ updates:
       interval: daily
       time: "08:00"
       timezone: Europe/Paris
-    # Dependabot waits 3 days after a release by default; exempt the contract.
+    # Hold other action bumps 3 days after their release; a new contract
+    # version arrives at once.
     cooldown:
       default-days: 3
       exclude:

@@ -23,7 +23,8 @@ use PoliPage\Internal\Constants;
  * measured on the server. Each case runs through Guzzle and through Symfony
  * HttpClient.
  *
- * `tests/contract-skip.json` maps the case ids allowed to fail to the reason.
+ * `tests/contract-skip.json` maps the case ids allowed to fail to the reason;
+ * a key `<id>@guzzle` or `<id>@symfony` lists a case for that client only.
  * A listed case that passes, or a listed id that is not a case this test
  * runs, fails the run.
  *
@@ -80,7 +81,13 @@ final class ContractTest extends TestCase
     public function testSkipListNamesOnlyCasesThatRun(): void
     {
         $contract = $this->contract();
-        $unknown = array_values(array_diff(array_keys($contract->skip), $contract->runningIds()));
+        $keys = $contract->runningIds();
+        foreach ($contract->runningIds() as $id) {
+            foreach (CaseInvoker::HTTP_CLIENTS as $httpClient) {
+                $keys[] = $id . '@' . $httpClient;
+            }
+        }
+        $unknown = array_values(array_diff(array_keys($contract->skip), $keys));
         self::assertSame([], $unknown, 'not cases this test runs: remove them from tests/contract-skip.json');
     }
 
@@ -157,7 +164,9 @@ final class ContractTest extends TestCase
         if (!$contract->runs($case)) {
             self::markTestSkipped(sprintf('policy.cancellationSdks does not list %s', ContractFile::SDK_NAME));
         }
-        $reason = $contract->skip[$id] ?? null;
+        // `<id>@<client>` lists a case for one HTTP client only.
+        $key = isset($contract->skip[$id . '@' . $httpClient]) ? $id . '@' . $httpClient : $id;
+        $reason = $contract->skip[$key] ?? null;
         if ($reason === null) {
             $this->runCase($case, $httpClient);
 
@@ -168,7 +177,7 @@ final class ContractTest extends TestCase
         } catch (AssertionFailedError) {
             self::markTestIncomplete('listed in tests/contract-skip.json: ' . $reason);
         }
-        self::fail($id . ' passes now: remove it from tests/contract-skip.json');
+        self::fail(sprintf('%s passes now with %s: remove "%s" from tests/contract-skip.json', $id, $httpClient, $key));
     }
 
     private function runCase(ContractCase $case, string $httpClient): void

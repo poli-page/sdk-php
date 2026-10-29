@@ -38,7 +38,8 @@ runs against a local mock server, through Guzzle and through Symfony
 HttpClient. Without `POLI_CONTRACT` the suite is skipped locally (and fails
 in CI). To run it, download that version's `contract.json` and run
 `POLI_CONTRACT=<path to contract.json> composer test`. Case ids allowed to
-fail are listed, with the reason, in `tests/contract-skip.json`.
+fail are listed, with the reason, in `tests/contract-skip.json`; a key
+`<id>@guzzle` or `<id>@symfony` lists a case for that HTTP client only.
 
 ## Integration tests
 

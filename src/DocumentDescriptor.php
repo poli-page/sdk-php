@@ -55,10 +55,14 @@ final readonly class DocumentDescriptor
      * a fresh fetch every time; the URL has a 15-minute TTL — call
      * `$client->documents->get($this->documentId)->downloadPdf()` to refresh.
      *
-     * @param float|null $timeout per-call timeout in seconds; `null` defers to the client default
+     * @param float|null $timeout bound on the download in seconds, applied with Guzzle and Symfony
+     *                           HttpClient. `null` sets none: the injected client's own timeout
+     *                           applies (none at all with Guzzle's defaults), not the
+     *                           SDK's `timeout` option, which bounds API attempts
      *
-     * @throws Exception\TimeoutException     when the underlying client reports a timeout (Guzzle: cURL error 28)
-     * @throws PoliPageException              with code DOWNLOAD_FAILED on non-2xx or transport failure
+     * @throws PoliPageException with code DOWNLOAD_FAILED on a non-2xx answer (with the storage
+     *                           status) or when no complete answer came, a timeout included
+     *                           (without one). The download is never retried.
      */
     public function downloadPdf(?float $timeout = null): string
     {
