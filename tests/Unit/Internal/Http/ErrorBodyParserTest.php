@@ -45,7 +45,7 @@ final class ErrorBodyParserTest extends TestCase
     {
         $result = ErrorBodyParser::parse('not json', 502);
         self::assertSame(
-            ['code' => 'INTERNAL_ERROR', 'message' => 'HTTP 502: response body was not valid JSON'],
+            ['code' => 'INTERNAL_ERROR', 'message' => 'HTTP 502'],
             $result,
         );
     }

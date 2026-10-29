@@ -68,7 +68,7 @@ final class Render
     {
         if ($input->project === '') {
             throw new PoliPageException(
-                'project is required for render.document / render.pdf / render.pdfStream',
+                Constants::MESSAGE_PROJECT_REQUIRED,
                 PoliPageException::PROJECT_REQUIRED_FOR_DOCUMENT,
             );
         }

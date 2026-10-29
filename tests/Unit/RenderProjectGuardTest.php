@@ -29,6 +29,8 @@ final class RenderProjectGuardTest extends TestCase
             self::fail('Expected PoliPageException to be thrown');
         } catch (PoliPageException $e) {
             self::assertSame(PoliPageException::PROJECT_REQUIRED_FOR_DOCUMENT, $e->errorCode);
+            self::assertSame('project is required', $e->getMessage());
+            self::assertNull($e->status);
         }
 
         // Transport must never be invoked

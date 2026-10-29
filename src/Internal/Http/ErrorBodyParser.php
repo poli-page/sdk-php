@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace PoliPage\Internal\Http;
 
 /**
- * Parses a non-2xx response body into a `{code, message}` pair. Falls back to
- * `INTERNAL_ERROR` when the body is not parseable JSON or is not an object.
+ * Parses a non-2xx response body into a `{code, message}` pair (SDK spec
+ * §8.2). Falls back to `INTERNAL_ERROR` and `HTTP <status>` when the body is
+ * not parseable JSON or is not an object; the caller keeps the real status.
  *
  * Mirrors sdk-node/src/internal/http.ts `parseErrorBody`. Fallback chain:
  * `code → message → error → 'unknown_error'`.
@@ -60,7 +61,7 @@ final class ErrorBodyParser
     {
         return [
             'code' => 'INTERNAL_ERROR',
-            'message' => "HTTP $status: response body was not valid JSON",
+            'message' => "HTTP $status",
         ];
     }
 }

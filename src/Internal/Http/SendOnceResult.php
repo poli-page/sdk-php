@@ -9,9 +9,10 @@ use Psr\Http\Message\ResponseInterface;
 
 /**
  * Outcome of a single send attempt inside the retry loop. Either the
- * response is set (success) or the error is set (failure); never both.
- * `$retryAfter` carries the server's hint (in seconds) when the failure
- * is retryable.
+ * response is set (success, its body already read in full) or the error is
+ * set (failure); never both. `$retryAfter` carries the server's hint (in
+ * seconds) when the failure is retryable; whether it is comes from the
+ * error itself ({@see PoliPageException::isRetryable()}).
  *
  * @internal
  */
@@ -20,8 +21,7 @@ final readonly class SendOnceResult
     public function __construct(
         public ?ResponseInterface $response,
         public ?PoliPageException $error,
-        public ?float $retryAfter,
-        public bool $retryable,
+        public ?float $retryAfter = null,
     ) {
     }
 

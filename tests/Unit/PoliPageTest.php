@@ -289,6 +289,8 @@ final class PoliPageTest extends TestCase
             self::fail('Expected ConnectionException');
         } catch (ConnectionException $e) {
             self::assertSame(PoliPageException::NETWORK_ERROR, $e->errorCode);
+            self::assertSame('Network request failed', $e->getMessage());
+            self::assertSame($networkException, $e->getPrevious());
             self::assertNull($e->status);
             self::assertCount(2, $mock->getRequests());
         }

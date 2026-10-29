@@ -12,6 +12,8 @@ use PoliPage\Events\RetryEvent;
 use PoliPage\Internal\Constants;
 use PoliPage\Internal\ExceptionClassifier;
 use PoliPage\Internal\Http\Backoff;
+use PoliPage\Internal\Http\BodyReader;
+use PoliPage\Internal\Http\DownloadStream;
 use PoliPage\Internal\Http\ErrorBodyParser;
 use PoliPage\Internal\Http\Headers;
 use PoliPage\Internal\Http\RetryAfterParser;
@@ -100,7 +102,7 @@ final class PoliPage implements Transport
         ?\Closure $jitterSource = null,
     ) {
         if ($apiKey === '') {
-            throw new PoliPageException('apiKey is required', PoliPageException::INVALID_OPTIONS);
+            throw new PoliPageException(Constants::MESSAGE_INVALID_OPTIONS, PoliPageException::INVALID_OPTIONS);
         }
         $this->apiKey = $apiKey;
         $this->baseUrl = $baseUrl ?? Constants::DEFAULT_BASE_URL;
@@ -182,7 +184,11 @@ final class PoliPage implements Transport
     public function fetchBytes(string $url, ?float $timeout): string
     {
         $response = $this->sendUnauthenticatedGet($url, $timeout);
-        $body = (string) $response->getBody();
+        try {
+            $body = BodyReader::read($response->getBody());
+        } catch (\Exception $e) {
+            throw DownloadStream::failure($e);
+        }
         if ($body === '') {
             throw new PoliPageException(
                 'PDF download response had an empty body',
@@ -201,8 +207,8 @@ final class PoliPage implements Transport
         // No size sanity check: PSR-7 streams may report `getSize() === null`
         // (chunked transfer, unknown content-length) and zero-length 2xx
         // responses would surface as `eof()` immediately on the caller side
-        // anyway. Errors are caught upstream in sendUnauthenticatedGet.
-        return $response->getBody();
+        // anyway. A failure while the caller reads it is DOWNLOAD_FAILED.
+        return new DownloadStream($response->getBody());
     }
 
     /**
@@ -211,6 +217,10 @@ final class PoliPage implements Transport
      * idempotency are deliberately bypassed because the URL is already
      * signed and the storage endpoint does not honour any of them. The
      * caller's `$timeout` is applied via {@see TimeoutPolicy::send}.
+     *
+     * Every failure is DOWNLOAD_FAILED (SDK spec §7.2): with the storage
+     * status for a non-2xx answer, without one (and the HTTP library's error
+     * as `previous`) when no answer came, a timeout included.
      */
     private function sendUnauthenticatedGet(string $url, ?float $timeout): ResponseInterface
     {
@@ -218,25 +228,13 @@ final class PoliPage implements Transport
         try {
             $response = TimeoutPolicy::send($this->httpClient, $request, $timeout);
         } catch (ClientExceptionInterface $e) {
-            if (TimeoutPolicy::isTimeout($e)) {
-                throw ExceptionClassifier::timeout(
-                    sprintf('PDF download timed out after %.1fs: %s', (float) $timeout, $e->getMessage()),
-                    $e,
-                );
-            }
-            throw new PoliPageException(
-                'Failed to download PDF: ' . $e->getMessage(),
-                PoliPageException::DOWNLOAD_FAILED,
-                null,
-                null,
-                $e,
-            );
+            throw DownloadStream::failure($e);
         }
 
         $status = $response->getStatusCode();
         if ($status < 200 || $status >= 300) {
             throw new PoliPageException(
-                sprintf('Failed to download PDF: %d %s', $status, $response->getReasonPhrase()),
+                str_replace('{status}', (string) $status, Constants::MESSAGE_DOWNLOAD_FAILED),
                 PoliPageException::DOWNLOAD_FAILED,
                 $status,
             );
@@ -297,7 +295,7 @@ final class PoliPage implements Transport
             }
             $lastError = $result->error;
 
-            if (!$result->retryable || $attempt >= $this->maxRetries) {
+            if (!$lastError->isRetryable() || $attempt >= $this->maxRetries) {
                 $this->logger->error('polipage: terminal failure', [
                     'method' => $method,
                     'path' => $path,
@@ -326,8 +324,38 @@ final class PoliPage implements Transport
                 'path' => $path,
                 'previous_error_code' => $lastError->errorCode,
             ]);
-            usleep((int) round($delay * 1_000_000));
+            self::sleepAtLeast($delay);
         }
+    }
+
+    /**
+     * Waits `$seconds`, never less (SDK spec §9.2): `usleep()` can return
+     * early (a signal, a coarse timer), so it sleeps again for the rest,
+     * measured on the monotonic clock.
+     */
+    private static function sleepAtLeast(float $seconds): void
+    {
+        $deadline = hrtime(true) + $seconds * 1e9;
+        while (($left = $deadline - hrtime(true)) > 0) {
+            usleep((int) ceil($left / 1000));
+        }
+    }
+
+    /**
+     * The error of an attempt that got no complete answer: `timeout` when the
+     * HTTP library reports one, else `network_error`. The library's error is
+     * `previous`; the message is the SDK specification's exact text.
+     */
+    private static function transportError(\Throwable $e, float $timeout): PoliPageException
+    {
+        if (TimeoutPolicy::isTimeout($e)) {
+            return ExceptionClassifier::timeout(
+                str_replace('{timeoutMs}', (string) (int) round($timeout * 1000), Constants::MESSAGE_TIMEOUT),
+                $e,
+            );
+        }
+
+        return ExceptionClassifier::networkError(Constants::MESSAGE_NETWORK_ERROR, $e);
     }
 
     /**
@@ -354,7 +382,7 @@ final class PoliPage implements Transport
                     $option . ' contains characters that are not allowed in an HTTP header '
                     . '(such as a trailing newline or another control character)',
                     PoliPageException::INVALID_OPTIONS,
-                ), null, false);
+                ));
             }
         }
         $request = $this->requestFactory->createRequest($method, $url);
@@ -369,7 +397,7 @@ final class PoliPage implements Transport
                 'A request header value was rejected by the PSR-7 implementation '
                 . '(apiKey or idempotencyKey contains a byte it does not accept)',
                 PoliPageException::INVALID_OPTIONS,
-            ), null, false);
+            ));
         }
         if ($bodyJson !== null) {
             $request = $request->withBody($this->streamFactory->createStream($bodyJson));
@@ -391,49 +419,68 @@ final class PoliPage implements Transport
         try {
             $response = TimeoutPolicy::send($this->httpClient, $request, $timeout);
         } catch (ClientExceptionInterface $e) {
-            $error = TimeoutPolicy::isTimeout($e)
-                ? ExceptionClassifier::timeout(
-                    sprintf('Request timed out after %.1fs: %s', $timeout, $e->getMessage()),
-                    $e,
-                )
-                : ExceptionClassifier::networkError($e->getMessage(), $e);
-
-            return new SendOnceResult(null, $error, null, true);
+            return new SendOnceResult(null, self::transportError($e, $timeout));
         }
 
         $status = $response->getStatusCode();
         $requestIdHeader = $response->getHeaderLine(Constants::HEADER_REQUEST_ID);
         $requestId = $requestIdHeader !== '' ? $requestIdHeader : null;
-        $durationMs = (microtime(true) - $startedAt) * 1000.0;
+        $ok = $status >= 200 && $status < 300;
 
-        if ($status >= 200 && $status < 300) {
-            $this->logger->info('polipage: response ok', [
-                'method' => $method,
-                'path' => $path,
-                'status' => $status,
-                'request_id' => $requestId,
-                'duration_ms' => $durationMs,
-            ]);
-            $this->fireOnResponse(new ResponseEvent(
-                status: $status,
-                requestId: $requestId,
-                durationMs: (int) round($durationMs),
-            ));
+        // The whole body is read inside the attempt (SDK spec §9.1), so a
+        // failure mid-body belongs to this attempt and goes through the retry
+        // policy. Clients that stream the body lazily would otherwise fail
+        // later, outside the retry loop.
+        try {
+            $body = BodyReader::read($response->getBody());
+        } catch (\Exception $e) {
+            if ($ok) {
+                return new SendOnceResult(null, self::transportError($e, $timeout));
+            }
 
-            return new SendOnceResult($response, null, null, false);
+            // A malformed error body (SDK spec §8.2): never a code from the
+            // bytes received so far. Retried by its status.
+            return self::errorResult(
+                $response,
+                ExceptionClassifier::fromStatus(PoliPageException::INTERNAL_ERROR, $status, "HTTP $status", $requestId, $e),
+            );
         }
 
-        $retryable = $status >= 500 || $status === 429;
+        if (!$ok) {
+            ['code' => $code, 'message' => $message] = ErrorBodyParser::parse($body, $status);
+
+            return self::errorResult($response, ExceptionClassifier::fromStatus($code, $status, $message, $requestId));
+        }
+
+        $durationMs = (microtime(true) - $startedAt) * 1000.0;
+        $this->logger->info('polipage: response ok', [
+            'method' => $method,
+            'path' => $path,
+            'status' => $status,
+            'request_id' => $requestId,
+            'duration_ms' => $durationMs,
+        ]);
+        $this->fireOnResponse(new ResponseEvent(
+            status: $status,
+            requestId: $requestId,
+            durationMs: (int) round($durationMs),
+        ));
+
+        return new SendOnceResult($response->withBody($this->streamFactory->createStream($body)), null);
+    }
+
+    /**
+     * A failed attempt with an HTTP answer, and the server's `Retry-After`
+     * when the error is retried.
+     */
+    private static function errorResult(ResponseInterface $response, PoliPageException $error): SendOnceResult
+    {
         $retryAfterHeader = $response->getHeaderLine(Constants::HEADER_RETRY_AFTER);
-        $retryAfter = $retryable
+        $retryAfter = $error->isRetryable()
             ? RetryAfterParser::parse($retryAfterHeader !== '' ? $retryAfterHeader : null)
             : null;
 
-        $errorBody = (string) $response->getBody();
-        ['code' => $code, 'message' => $message] = ErrorBodyParser::parse($errorBody, $status);
-        $error = ExceptionClassifier::fromStatus($code, $status, $message, $requestId);
-
-        return new SendOnceResult(null, $error, $retryAfter, $retryable);
+        return new SendOnceResult(null, $error, $retryAfter);
     }
 
     private function fireOnRetry(RetryEvent $event): void

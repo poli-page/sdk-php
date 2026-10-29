@@ -7,37 +7,62 @@ namespace PoliPage\Internal\Http;
 use PoliPage\Internal\Constants;
 
 /**
- * Parses the `Retry-After` response header. Accepts either an integer
- * number of seconds or an HTTP-date. Returns the delay in **seconds**, capped
- * at {@see Constants::RETRY_AFTER_CAP_SECONDS}. Returns `null` when the
- * header is missing or unparseable.
- *
- * Mirrors sdk-node/src/internal/http.ts `parseRetryAfter` but in seconds
- * (PHP convention) rather than milliseconds.
+ * Parses the `Retry-After` response header (SDK spec §9.2): integer seconds
+ * or an HTTP-date (RFC 9110 §10.2.3). Returns the delay in **seconds**,
+ * clamped to 0–{@see Constants::RETRY_AFTER_CAP_SECONDS}; a date in the past
+ * gives 0. Returns `null` when the header is missing or is neither form
+ * (`1.5`, `-1`, `soon`), so the backoff applies. `Retry-After-Ms` is never
+ * read.
  *
  * @internal
  */
 final class RetryAfterParser
 {
+    /** The three HTTP-date forms a recipient accepts: IMF-fixdate, RFC 850, asctime. */
+    private const DATE_FORMATS = ['D, d M Y H:i:s \G\M\T', 'l, d-M-y H:i:s \G\M\T', 'D M j H:i:s Y'];
+
     public static function parse(?string $headerValue): ?float
     {
-        if ($headerValue === null || $headerValue === '') {
+        $value = trim($headerValue ?? '');
+        if ($value === '') {
             return null;
         }
 
-        if (is_numeric($headerValue)) {
-            $seconds = (float) $headerValue;
+        if (ctype_digit($value)) {
+            // Clamp on the digit count first: a value too large for an int
+            // would saturate or wrap when cast, and any such value is past
+            // the cap anyway.
+            $digits = ltrim($value, '0');
+            if (strlen($digits) > 9) {
+                return Constants::RETRY_AFTER_CAP_SECONDS;
+            }
 
-            return self::clamp($seconds);
+            return self::clamp((float) (int) $digits);
         }
 
-        $timestamp = strtotime($headerValue);
-        if ($timestamp === false) {
+        $timestamp = self::parseHttpDate($value);
+        if ($timestamp === null) {
             return null;
         }
-        $delta = (float) ($timestamp - time());
 
-        return self::clamp($delta);
+        return self::clamp($timestamp - microtime(true));
+    }
+
+    private static function parseHttpDate(string $value): ?int
+    {
+        // asctime pads a one-digit day with a space ("Nov  6"): collapse runs.
+        $normalized = (string) preg_replace('/\s+/', ' ', $value);
+        $utc = new \DateTimeZone('UTC');
+        foreach (self::DATE_FORMATS as $format) {
+            $date = \DateTimeImmutable::createFromFormat('!' . $format, $normalized, $utc);
+            $errors = \DateTimeImmutable::getLastErrors();
+            $clean = $errors === false || ($errors['warning_count'] === 0 && $errors['error_count'] === 0);
+            if ($date !== false && $clean) {
+                return $date->getTimestamp();
+            }
+        }
+
+        return null;
     }
 
     private static function clamp(float $seconds): float

@@ -75,7 +75,7 @@ final class PoliPageTransportTest extends TestCase
             $factory->createResponse(429)
                 ->withHeader('Retry-After', '0')
                 ->withBody($factory->createStream(json_encode([
-                    'code' => 'QUOTA_EXCEEDED',
+                    'code' => 'RATE_LIMIT_EXCEEDED',
                     'message' => 'slow down',
                 ], flags: JSON_THROW_ON_ERROR))),
         );

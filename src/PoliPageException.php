@@ -5,11 +5,7 @@ declare(strict_types=1);
 namespace PoliPage;
 
 use PoliPage\Exception\ApiStatusException;
-use PoliPage\Exception\AuthenticationException;
-use PoliPage\Exception\BadRequestException;
-use PoliPage\Exception\ConnectionException;
-use PoliPage\Exception\PermissionDeniedException;
-use PoliPage\Exception\RateLimitException;
+use PoliPage\Internal\Constants;
 
 /**
  * Base exception type for every error raised by the Poli Page SDK.
@@ -60,6 +56,8 @@ class PoliPageException extends \RuntimeException
     public const ENVIRONMENT_MISMATCH = 'ENVIRONMENT_MISMATCH';
     public const EMPTY_DOCUMENT = 'EMPTY_DOCUMENT';
     public const TEMPLATE_ERROR = 'TEMPLATE_ERROR';
+    /** The template, a partial or an SVG asset holds an injection attempt; `detail` names it. Not retried. */
+    public const TEMPLATE_UNSAFE = 'TEMPLATE_UNSAFE';
     public const RENDER_BODY_TOO_LARGE = 'RENDER_BODY_TOO_LARGE';
     public const DOCUMENT_TOO_LARGE = 'DOCUMENT_TOO_LARGE';
     public const QUOTA_EXCEEDED = 'QUOTA_EXCEEDED';
@@ -90,30 +88,52 @@ class PoliPageException extends \RuntimeException
         $this->requestId = $requestId;
     }
 
+    // Predicate helpers (SDK spec §8.1), the same in every Poli Page SDK. They
+    // read `status` and `code`, so they also hold for an error that is not one
+    // of the status subclasses: a DOWNLOAD_FAILED with the storage's 403 is an
+    // auth error. Idiomatic PHP can catch the subclasses instead.
+
+    /**
+     * `status` is 401 or 403.
+     */
     public function isAuthError(): bool
     {
-        return $this instanceof AuthenticationException
-            || $this instanceof PermissionDeniedException;
+        return $this->status === 401 || $this->status === 403;
     }
 
+    /**
+     * `status` is 429.
+     */
     public function isRateLimitError(): bool
     {
-        return $this instanceof RateLimitException;
+        return $this->status === 429;
     }
 
+    /**
+     * `status` is 400.
+     */
     public function isValidationError(): bool
     {
-        return $this instanceof BadRequestException;
+        return $this->status === 400;
     }
 
+    /**
+     * `code` is `network_error` or `timeout`.
+     */
     public function isNetworkError(): bool
     {
-        return $this instanceof ConnectionException;
+        return $this->errorCode === self::NETWORK_ERROR || $this->errorCode === self::TIMEOUT;
     }
 
+    /**
+     * A network error, a timeout, a 5xx or a 429 the SDK retries (SDK spec
+     * §9.1). Never `aborted`, and never `QUOTA_EXCEEDED`,
+     * `OVERAGE_CAP_EXCEEDED` or `STORAGE_ACCESS_DENIED`: waiting cannot fix
+     * them.
+     */
     public function isRetryable(): bool
     {
-        if ($this->errorCode === self::ABORTED) {
+        if ($this->errorCode === self::ABORTED || in_array($this->errorCode, Constants::NON_RETRYABLE_CODES, true)) {
             return false;
         }
         if ($this->isNetworkError()) {
