@@ -110,6 +110,7 @@ final class PoliPage implements Transport
         $this->retryDelay = $retryDelay ?? Constants::DEFAULT_RETRY_DELAY_SECONDS;
         $this->defaultTimeout = $timeout ?? Constants::DEFAULT_TIMEOUT_SECONDS;
         $this->httpClient = $httpClient ?? self::discoverHttpClient();
+        TimeoutPolicy::checkClient($this->httpClient);
         $this->requestFactory = $requestFactory ?? self::discoverRequestFactory();
         $this->streamFactory = $streamFactory ?? self::discoverStreamFactory();
         $this->logger = $logger ?? new NullLogger();
@@ -420,8 +421,6 @@ final class PoliPage implements Transport
             $response = TimeoutPolicy::send($this->httpClient, $request, $timeout);
         } catch (ClientExceptionInterface $e) {
             return new SendOnceResult(null, self::transportError($e, $timeout));
-        } catch (PoliPageException $e) {
-            return new SendOnceResult(null, $e);
         }
 
         $status = $response->getStatusCode();

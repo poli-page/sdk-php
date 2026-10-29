@@ -57,6 +57,9 @@ final class TimeoutPolicy
 {
     private const TIMEOUT_PHRASES = ['timed out', 'timeout reached', 'max duration'];
 
+    /** The most `withOptions()` clones kept per Symfony client. */
+    public const MAX_SYMFONY_CLONES = 16;
+
     /** @var \WeakMap<object, mixed>|null client => (serialized options => clone) */
     private static ?\WeakMap $symfonyClones = null;
 
@@ -106,20 +109,31 @@ final class TimeoutPolicy
                 $options['extra'] = ['curl' => [\CURLOPT_FRESH_CONNECT => true]];
             }
             if ($options !== []) {
-                if (!self::hasMethod($client, 'withOptions')) {
-                    // composer.json conflicts with symfony/http-client < 6.2;
-                    // an install that bypassed it gets the SDK's error, never
-                    // a raw \Error, and never a request without its timeout.
-                    throw new PoliPageException(
-                        'symfony/http-client 6.2 or later is required: Psr18Client::withOptions() is missing',
-                        PoliPageException::INVALID_OPTIONS,
-                    );
-                }
                 $client = self::symfonyClient($client, $options);
             }
         }
 
         return $client->sendRequest($request);
+    }
+
+    /**
+     * Rejects, at construction, an HTTP client the SDK cannot apply its
+     * per-request options to: a Symfony `Psr18Client` without `withOptions()`
+     * (before 6.2). composer.json conflicts with those versions; an install
+     * that bypassed the conflict gets `invalid_options` (SDK spec §4.1), never
+     * a raw `\Error` later or a request without its timeout.
+     */
+    public static function checkClient(ClientInterface $client): void
+    {
+        if (class_exists(\Symfony\Component\HttpClient\Psr18Client::class)
+            && $client instanceof \Symfony\Component\HttpClient\Psr18Client
+            && !self::hasMethod($client, 'withOptions')
+        ) {
+            throw new PoliPageException(
+                'symfony/http-client 6.2 or later is required: Psr18Client::withOptions() is missing',
+                PoliPageException::INVALID_OPTIONS,
+            );
+        }
     }
 
     /**
@@ -153,27 +167,59 @@ final class TimeoutPolicy
      * Why: symfony/http-client 6.x creates a client's connection pool on its
      * first request, so a clone made per request would get a new pool each
      * time and never reuse a connection. One clone per option set keeps its
-     * pool across the SDK's calls.
+     * pool across the SDK's calls. Each client keeps at most
+     * {@see self::MAX_SYMFONY_CLONES}, the least recently used evicted first:
+     * per-call timeouts that keep changing (the time left before a deadline,
+     * say) would otherwise pile up clones, and on 6.x each holds its own
+     * pool and keep-alive sockets.
+     *
+     * @internal public for its unit test
      *
      * @param array<string, mixed> $options
      */
-    private static function symfonyClient(
+    public static function symfonyClient(
         \Symfony\Component\HttpClient\Psr18Client $client,
         array $options,
     ): \Symfony\Component\HttpClient\Psr18Client {
         $map = self::$symfonyClones ?? new \WeakMap();
         self::$symfonyClones = $map;
         $key = serialize($options);
-        $clones = $map[$client] ?? null;
-        $clones = is_array($clones) ? $clones : [];
-        $clone = $clones[$key] ?? null;
-        if (!$clone instanceof \Symfony\Component\HttpClient\Psr18Client) {
-            $clone = $client->withOptions($options);
-            $clones[$key] = $clone;
-            $map[$client] = $clones;
+        $clones = self::clones($map[$client] ?? null);
+        $clone = $clones[$key] ?? $client->withOptions($options);
+        // Most recently used last: re-insert the key at the end.
+        unset($clones[$key]);
+        $clones[$key] = $clone;
+        if (count($clones) > self::MAX_SYMFONY_CLONES) {
+            array_shift($clones);
         }
+        $map[$client] = $clones;
 
         return $clone;
+    }
+
+    /**
+     * How many clones a client holds.
+     *
+     * @internal for the unit test of {@see symfonyClient()}
+     */
+    public static function symfonyCloneCount(\Symfony\Component\HttpClient\Psr18Client $client): int
+    {
+        return count(self::clones(self::$symfonyClones[$client] ?? null));
+    }
+
+    /**
+     * @return array<string, \Symfony\Component\HttpClient\Psr18Client>
+     */
+    private static function clones(mixed $entry): array
+    {
+        $clones = [];
+        foreach (is_array($entry) ? $entry : [] as $key => $clone) {
+            if ($clone instanceof \Symfony\Component\HttpClient\Psr18Client) {
+                $clones[(string) $key] = $clone;
+            }
+        }
+
+        return $clones;
     }
 
     /**

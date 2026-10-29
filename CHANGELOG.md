@@ -46,12 +46,13 @@ Conformance with the Poli Page API contract v1.2.0
 - **Breaking:** the package conflicts with symfony/http-client older than
   6.2. The SDK applies its per-request options through
   `Psr18Client::withOptions()`, which 6.2 added; without it, an install
-  that bypassed the conflict gets `invalid_options` on each request rather
-  than a request without its timeout. Symfony 5.4 to 6.1 users upgrade
+  that bypassed the conflict gets `invalid_options` from the `PoliPage`
+  constructor rather than requests without their timeout. Symfony 5.4 to 6.1 users upgrade
   symfony/http-client, or inject Guzzle.
 - The SDK's `timeout` now applies with Symfony HttpClient: each attempt
   gets `max_duration` (the total bound) and Symfony's idle `timeout` set
-  to it. Before, the option had no effect with Symfony: an attempt waited
+  to it, through a `withOptions()` copy of your client kept per option set
+  (at most 16 per client, the least recently used dropped first). Before, the option had no effect with Symfony: an attempt waited
   the client's own idle timeout (`default_socket_timeout`, 60 s by default)
   with no total bound, and the `timeout` error still named the SDK's
   value. A timeout is now also recognised by the exception's class

@@ -46,6 +46,11 @@ final class Render
      * PDF in memory. The caller owns the stream's lifecycle — close it
      * (or let `__destruct` close it) when done.
      *
+     * An explicit `$input->timeout` also bounds the download until its body
+     * is fully read; with Symfony HttpClient that includes the time the
+     * caller spends reading the stream. Leave it unset to stream without a
+     * bound from the SDK (the injected client's own timeout still applies).
+     *
      * @throws PoliPageException see {@see pdf} for the failure modes
      */
     public function pdfStream(RenderInput $input): StreamInterface
