@@ -38,7 +38,8 @@ use Psr\Http\Message\ResponseInterface;
  * with Guzzle and with Symfony's `Psr18Client`, so a dead connection
  * surfaces as `network_error` and goes through the SDK's own retry. A GET or
  * DELETE may still be resent once by libcurl, which stores nothing. Other
- * PSR-18 clients are sent the request as is.
+ * PSR-18 clients are sent the request as is. With Symfony, the option
+ * replaces any `extra.curl` default of the client for the SDK's POSTs.
  *
  * Timeout-vs-network detection on caught exceptions is done by message
  * text. Across the clients we care about a transport timeout always
@@ -76,8 +77,11 @@ final class TimeoutPolicy
             ];
             if ($freshConnection) {
                 // Read by Guzzle's curl handler only; its stream handler opens
-                // a connection per request anyway.
-                $options['curl'] = [\CURLOPT_FRESH_CONNECT => true];
+                // a connection per request anyway. Guzzle merges request
+                // options over the client's shallowly, so the client's own
+                // `curl` options are carried over.
+                $clientCurl = $client->getConfig('curl');
+                $options['curl'] = [\CURLOPT_FRESH_CONNECT => true] + (is_array($clientCurl) ? $clientCurl : []);
             }
 
             return $client->send($request, $options);
@@ -88,7 +92,9 @@ final class TimeoutPolicy
             && $client instanceof \Symfony\Component\HttpClient\Psr18Client
         ) {
             // A clone sharing the client's connection pool; `extra.curl` is
-            // read by CurlHttpClient only.
+            // read by CurlHttpClient only. Symfony gives this `extra.curl`
+            // precedence over an `extra.curl` default of the client, which it
+            // does not expose, so such a default does not reach the SDK's POSTs.
             $client = $client->withOptions(['extra' => ['curl' => [\CURLOPT_FRESH_CONNECT => true]]]);
         }
 

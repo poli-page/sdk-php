@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace PoliPage\Tests\Unit;
 
 use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
@@ -77,6 +80,29 @@ final class NoHiddenResendTest extends TestCase
             ['GET /v1/documents/doc_abc', 'GET /v1/documents/doc_abc', 'GET /v1/documents/doc_abc'],
             self::lines($requests),
         );
+    }
+
+    public function testGuzzleKeepsTheClientsOwnCurlOptions(): void
+    {
+        // Guzzle merges request options over the client's shallowly: the
+        // request's `curl` must carry the client's `curl` defaults too.
+        $body = json_encode(DocumentWire::descriptor(), JSON_THROW_ON_ERROR);
+        $handler = new MockHandler([new Response(200, [], $body), new Response(200, [], $body)]);
+        $client = new PoliPage(
+            apiKey: 'pp_sandbox_x',
+            httpClient: new GuzzleClient(['handler' => HandlerStack::create($handler), 'curl' => [\CURLOPT_LOW_SPEED_LIMIT => 1]]),
+        );
+
+        $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
+        self::assertSame([\CURLOPT_FRESH_CONNECT => true, \CURLOPT_LOW_SPEED_LIMIT => 1], self::field($handler->getLastOptions(), 'curl'));
+
+        $client->documents->get('doc_abc');
+        self::assertSame([\CURLOPT_LOW_SPEED_LIMIT => 1], self::field($handler->getLastOptions(), 'curl'));
+    }
+
+    private static function field(mixed $options, string $name): mixed
+    {
+        return is_array($options) ? ($options[$name] ?? null) : null;
     }
 
     private function server(): MockServer

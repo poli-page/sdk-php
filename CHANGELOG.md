@@ -88,7 +88,10 @@ Conformance with the Poli Page API contract v1.2.0
   could be stored twice. A POST now always opens a fresh connection with
   Guzzle and Symfony HttpClient, so the failure surfaces as
   `network_error` and goes through the SDK's own retry. A GET or DELETE
-  may still be resent once by libcurl, which stores nothing.
+  may still be resent once by libcurl, which stores nothing. With Guzzle
+  the client's own `curl` options still apply; with Symfony HttpClient the
+  SDK's POSTs carry their own `extra.curl`, which Symfony puts ahead of an
+  `extra.curl` default of your client.
 - A failure while the PDF body is read no longer escapes as the HTTP
   library's exception or a PHP warning: `render->pdf()`, `downloadPdf()`
   and reads of the `render->pdfStream()` stream raise `DOWNLOAD_FAILED`
