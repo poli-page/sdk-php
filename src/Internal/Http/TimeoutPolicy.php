@@ -9,7 +9,8 @@ use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
 /**
- * Per-request timeout enforcement on top of a PSR-18 client.
+ * Per-request transport options on top of a PSR-18 client: the per-attempt
+ * timeout, and no hidden resend of a POST.
  *
  * PSR-18 deliberately does not standardise per-request options (the spec
  * defers to the implementation). To honour the cross-SDK contract
@@ -26,6 +27,18 @@ use Psr\Http\Message\ResponseInterface;
  *    fallback documented in the README. The request still goes through
  *    `$client->sendRequest($request)`, so the client's own configured
  *    timeout still applies.
+ *
+ * **No hidden resend.** libcurl, under Guzzle's curl handler and under
+ * Symfony's `CurlHttpClient`, silently sends a request again on a fresh
+ * connection when it went out on a reused keep-alive connection that died
+ * before any answer. For a POST that resend is invisible to the SDK: not
+ * counted by `maxRetries`, not reported to `onRequest`, and, since the API
+ * does not deduplicate on `Idempotency-Key`, able to store a render twice. A
+ * POST therefore always opens a fresh connection (`CURLOPT_FRESH_CONNECT`)
+ * with Guzzle and with Symfony's `Psr18Client`, so a dead connection
+ * surfaces as `network_error` and goes through the SDK's own retry. A GET or
+ * DELETE may still be resent once by libcurl, which stores nothing. Other
+ * PSR-18 clients are sent the request as is.
  *
  * Timeout-vs-network detection on caught exceptions is done by message
  * text. Across the clients we care about a transport timeout always
@@ -48,17 +61,35 @@ final class TimeoutPolicy
         RequestInterface $request,
         ?float $timeoutSeconds,
     ): ResponseInterface {
+        $freshConnection = $request->getMethod() === 'POST' && \defined('CURLOPT_FRESH_CONNECT');
+
         if ($timeoutSeconds !== null
             && class_exists(\GuzzleHttp\Client::class)
             && $client instanceof \GuzzleHttp\Client
         ) {
             // Guzzle's native send() accepts per-request options. The PSR-18
             // path (sendRequest) ignores them, so use send() directly here.
-            return $client->send($request, [
+            $options = [
                 \GuzzleHttp\RequestOptions::TIMEOUT => $timeoutSeconds,
                 \GuzzleHttp\RequestOptions::HTTP_ERRORS => false,
                 \GuzzleHttp\RequestOptions::ALLOW_REDIRECTS => false,
-            ]);
+            ];
+            if ($freshConnection) {
+                // Read by Guzzle's curl handler only; its stream handler opens
+                // a connection per request anyway.
+                $options['curl'] = [\CURLOPT_FRESH_CONNECT => true];
+            }
+
+            return $client->send($request, $options);
+        }
+
+        if ($freshConnection
+            && class_exists(\Symfony\Component\HttpClient\Psr18Client::class)
+            && $client instanceof \Symfony\Component\HttpClient\Psr18Client
+        ) {
+            // A clone sharing the client's connection pool; `extra.curl` is
+            // read by CurlHttpClient only.
+            $client = $client->withOptions(['extra' => ['curl' => [\CURLOPT_FRESH_CONNECT => true]]]);
         }
 
         return $client->sendRequest($request);
