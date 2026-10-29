@@ -109,7 +109,53 @@ final class PoliPageExceptionTest extends TestCase
     {
         self::assertTrue((new InternalServerException('msg', 'INTERNAL_ERROR', 500))->isRetryable());
         self::assertTrue((new InternalServerException('msg', 'INTERNAL_ERROR', 503))->isRetryable());
-        self::assertTrue((new RateLimitException('msg', 'QUOTA_EXCEEDED', 429))->isRetryable());
+        self::assertTrue((new RateLimitException('msg', 'RATE_LIMIT_EXCEEDED', 429))->isRetryable());
+    }
+
+    /**
+     * @return iterable<string, array{class-string<PoliPageException>, string, int}>
+     */
+    public static function neverRetriedCodes(): iterable
+    {
+        yield 'QUOTA_EXCEEDED' => [RateLimitException::class, 'QUOTA_EXCEEDED', 429];
+        yield 'OVERAGE_CAP_EXCEEDED' => [RateLimitException::class, 'OVERAGE_CAP_EXCEEDED', 429];
+        yield 'STORAGE_ACCESS_DENIED' => [InternalServerException::class, 'STORAGE_ACCESS_DENIED', 502];
+    }
+
+    /**
+     * @param class-string<PoliPageException> $class
+     */
+    #[DataProvider('neverRetriedCodes')]
+    public function testIsRetryableFalseForTheNeverRetriedCodes(string $class, string $code, int $status): void
+    {
+        // SDK spec §9.1: waiting cannot fix them.
+        $exception = new $class('msg', $code, $status);
+        self::assertFalse($exception->isRetryable());
+    }
+
+    public function testPredicatesReadTheStatusWhateverTheClass(): void
+    {
+        // SDK spec §8.1: a DOWNLOAD_FAILED carries the storage status.
+        $forbidden = new PoliPageException('Failed to download PDF: HTTP 403', PoliPageException::DOWNLOAD_FAILED, 403);
+        self::assertTrue($forbidden->isAuthError());
+        self::assertFalse($forbidden->isRetryable());
+        self::assertTrue((new PoliPageException('m', PoliPageException::DOWNLOAD_FAILED, 401))->isAuthError());
+        self::assertTrue((new PoliPageException('m', PoliPageException::DOWNLOAD_FAILED, 429))->isRateLimitError());
+        self::assertTrue((new PoliPageException('m', PoliPageException::DOWNLOAD_FAILED, 400))->isValidationError());
+        self::assertTrue((new PoliPageException('m', PoliPageException::DOWNLOAD_FAILED, 503))->isRetryable());
+    }
+
+    public function testDownloadFailedWithoutStatusIsNeitherNetworkNorRetryable(): void
+    {
+        $exception = new PoliPageException('Failed to download PDF: network error', PoliPageException::DOWNLOAD_FAILED);
+        self::assertFalse($exception->isNetworkError());
+        self::assertFalse($exception->isRetryable());
+    }
+
+    public function testNetworkErrorReadsTheCode(): void
+    {
+        self::assertTrue((new PoliPageException('m', PoliPageException::NETWORK_ERROR))->isNetworkError());
+        self::assertTrue((new PoliPageException('m', PoliPageException::TIMEOUT))->isRetryable());
     }
 
     public function testIsRetryableFalseFor4xxOtherThan429(): void
@@ -193,6 +239,8 @@ final class PoliPageExceptionTest extends TestCase
             'ORGANIZATION_MIGRATING', 'PROJECT_NOT_FOUND', 'TEMPLATE_ERROR',
             'THUMBNAILS_NOT_AVAILABLE', 'RATE_LIMIT_EXCEEDED', 'RENDER_BODY_TOO_LARGE',
             'DOCUMENT_TOO_LARGE', 'RENDER_TIMEOUT',
+            // added with the API contract
+            'TEMPLATE_UNSAFE',
         ];
         foreach ($codes as $code) {
             yield $code => [$code];
@@ -208,7 +256,7 @@ final class PoliPageExceptionTest extends TestCase
         self::assertSame($code, \constant($constant));
     }
 
-    public function testKnownApiCodesAreExactlyTheThirtyOneOfTheContract(): void
+    public function testKnownApiCodesAreExactlyTheThirtyTwoOfTheContract(): void
     {
         $sdkCodes = ['invalid_options', 'network_error', 'timeout', 'aborted', 'unknown_error', 'DOWNLOAD_FAILED'];
         $apiCodes = [];
@@ -223,7 +271,7 @@ final class PoliPageExceptionTest extends TestCase
         $expected = array_keys(iterator_to_array(self::knownApiCodes()));
         sort($expected);
 
-        self::assertCount(31, $expected);
+        self::assertCount(32, $expected);
         self::assertSame($expected, $apiCodes);
     }
 

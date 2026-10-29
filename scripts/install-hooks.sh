@@ -57,8 +57,9 @@ if [ -x vendor/bin/phpstan ]; then
 fi
 
 if [ -x vendor/bin/phpunit ]; then
-    echo "[pre-push] phpunit --testsuite=unit"
-    vendor/bin/phpunit --testsuite=unit
+    # The contract suite runs only with POLI_CONTRACT set (it skips otherwise).
+    echo "[pre-push] phpunit --testsuite=unit,contract"
+    vendor/bin/phpunit --testsuite=unit,contract
 fi
 HOOK
 

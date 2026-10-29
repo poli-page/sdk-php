@@ -5,6 +5,99 @@ The package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
 before 1.0.0 a breaking change ships in a minor bump (0.9.x → 0.10.0), from
 1.0.0 on only in a major bump, and it always comes with an entry here.
 
+## From 0.10.0 to the next release (unreleased)
+
+The SDK now follows the retry policy and the error messages of the Poli
+Page API contract.
+
+### Three codes are no longer retried
+
+`QUOTA_EXCEEDED` and `OVERAGE_CAP_EXCEEDED` (429) and
+`STORAGE_ACCESS_DENIED` (502) are thrown at once, and `isRetryable()`
+returns `false` for them. A queue that requeues on `isRetryable()` now
+drops these errors: handle them by code instead, for example hold quota
+errors until the monthly reset and alert on `STORAGE_ACCESS_DENIED` until
+the bucket role is restored. `isRateLimitError()` is still `true` for the
+two 429s, and `catch (RateLimitException $e)` still catches them.
+
+```php
+// 0.10.0
+} catch (PoliPageException $e) {
+    if ($e->isRetryable()) { // was true for QUOTA_EXCEEDED
+        $queue->requeue($job);
+    }
+}
+
+// next release
+} catch (PoliPageException $e) {
+    if (in_array($e->errorCode, [PoliPageException::QUOTA_EXCEEDED, PoliPageException::OVERAGE_CAP_EXCEEDED], true)) {
+        $queue->holdUntilMonthlyReset($job);
+    } elseif ($e->isRetryable()) {
+        $queue->requeue($job);
+    }
+}
+```
+
+### Predicates read `status` and `errorCode`
+
+`isAuthError()`, `isRateLimitError()` and `isValidationError()` read the
+`status` (401/403, 429, 400) and `isNetworkError()` the `errorCode`
+(`network_error`, `timeout`), instead of the exception class. API errors
+behave as before, apart from the three codes above. A `DOWNLOAD_FAILED`
+now carries the storage's verdict: `isAuthError()` is `true` for a storage
+401 or 403 (an expired presigned URL), `isRateLimitError()` for a 429 and
+`isValidationError()` for a 400. To keep treating every download failure
+the same way, test the code first:
+
+```php
+} catch (PoliPageException $e) {
+    if ($e->errorCode === PoliPageException::DOWNLOAD_FAILED) {
+        $fresh = $client->documents->get($documentId); // a fresh presigned URL
+    } elseif ($e->isAuthError()) {
+        // check the API key
+    }
+}
+```
+
+### A download timeout is `DOWNLOAD_FAILED`
+
+A timeout of the presigned-URL download (`downloadPdf()`, the second hop of
+`render->pdf()` / `render->pdfStream()`) raises `DOWNLOAD_FAILED` with
+`Failed to download PDF: network error`, no status and `isRetryable()`
+`false`, instead of a `TimeoutException`. A `catch (TimeoutException $e)`
+around `render->pdf()` no longer sees it: catch `PoliPageException` and
+test `errorCode`.
+
+### symfony/http-client 6.2 or later
+
+The package now conflicts with symfony/http-client older than 6.2: the SDK
+applies its `timeout` and its fresh-connection option per request through
+`Psr18Client::withOptions()`, added in 6.2. On 5.4 to 6.1, upgrade:
+
+```bash
+composer require symfony/http-client:^6.4
+```
+
+or inject Guzzle as the PSR-18 client. With Symfony, the SDK's `timeout` now
+bounds each attempt (it had no effect before), so drop any timeout you set
+on the Symfony client only to stand in for it.
+
+### Messages
+
+If you match error messages, match `errorCode` instead: the SDK-side
+messages are now the specification's exact texts (`Network request
+failed`, `Request timed out after <ms>ms`, `Failed to download PDF: HTTP
+<status>`, `Failed to download PDF: network error`, `HTTP <status>` for an
+error body that is not JSON, `project is required`). The HTTP library's
+exception behind a network, timeout or download failure is
+`getPrevious()`.
+
+### `Retry-After`
+
+Only `Retry-After` in integer seconds or as an HTTP-date sets the delay
+before a retry (clamped to 30 s). A value such as `1.5` or `tomorrow`
+falls back to the exponential backoff. `Retry-After-Ms` is ignored.
+
 ## From 0.9.x to 0.10.0
 
 An API key now belongs to one environment of your organization

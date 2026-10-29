@@ -7,7 +7,7 @@ PHP has no language-level cancellation primitive equivalent to Node's `AbortSign
 
 ## Per-request timeouts
 
-Every render and document method accepts a per-call timeout in seconds. The timeout flows through to the PSR-18 client, then through the SDK's retry loop:
+Every render and document method accepts a per-call timeout in seconds. It bounds each attempt, and the SDK applies it per request with Guzzle and Symfony HTTP Client; with another PSR-18 client, set the timeout on the client you inject:
 
 ```php
 use PoliPage\RenderInput;
@@ -20,7 +20,7 @@ $pdf = $client->render->pdf(new RenderInput(
 ));
 ```
 
-When the deadline trips, the SDK raises a `PoliPage\Exception\TimeoutException` (which extends `ConnectionException`). Timeouts are retried up to `maxRetries` times.
+When the deadline trips on an API call, the SDK raises a `PoliPage\Exception\TimeoutException` (which extends `ConnectionException`) with the message `Request timed out after <ms>ms`. Timeouts are retried up to `maxRetries` times. The presigned-URL download of `render->pdf()` and `downloadPdf()` is the exception: it is never retried, and a timeout there raises `DOWNLOAD_FAILED` (`Failed to download PDF: network error`).
 
 ## HTTP-client cancellation
 

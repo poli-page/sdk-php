@@ -112,4 +112,18 @@ final class TimeoutPolicyTest extends TestCase
 
         self::assertFalse(TimeoutPolicy::isTimeout($exception));
     }
+
+    public function testIsTimeoutReadsSymfonysPhrasesAndTheWrappedException(): void
+    {
+        self::assertTrue(TimeoutPolicy::isTimeout(new \RuntimeException('Idle timeout reached for "http://127.0.0.1/x".')));
+        self::assertTrue(TimeoutPolicy::isTimeout(new \RuntimeException('Max duration was reached for "http://127.0.0.1/x".')));
+        self::assertTrue(TimeoutPolicy::isTimeout(
+            new \RuntimeException('transport failed', 0, new \RuntimeException('cURL error 28: Operation timed out')),
+        ));
+    }
+
+    public function testIsTimeoutIgnoresAHostNamedTimeout(): void
+    {
+        self::assertFalse(TimeoutPolicy::isTimeout(new \RuntimeException('Could not resolve host: timeout.example.com')));
+    }
 }

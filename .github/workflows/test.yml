@@ -161,19 +161,29 @@ jobs:
           echo "::error::composer audit failed after 3 attempts"
           exit 1
 
-      - name: Test (PHPUnit)
+      # Copies the pinned contract.json (the Poli Page API contract) to
+      # $RUNNER_TEMP; the contract suite (tests/Contract) runs its SDK cases.
+      # Pinned by commit; Dependabot proposes each new version.
+      - name: API contract
+        id: contract
+        uses: poli-page/api-contract@652ca4cc459314181031de1a0a5b8f647533acf5 # v1.2.0
+
+      # Strict on every leg: the repo has its manifest and tests, so a missing
+      # runner or contract can only mean a broken install, never a skip.
+      # With CI set, the contract suite fails (never skips) without
+      # POLI_CONTRACT; CI is set here too rather than left to the runner.
+      - name: Test (PHPUnit unit + API contract)
         shell: bash
+        env:
+          CI: "true"
+          POLI_CONTRACT: ${{ steps.contract.outputs.path }}
         run: |
-          if [ -x vendor/bin/phpunit ]; then
-            if [ -n "${{ matrix.coverage }}" ]; then
-              vendor/bin/phpunit --testsuite=unit --coverage-clover=coverage.xml
-            else
-              vendor/bin/phpunit --testsuite=unit
-            fi
-          elif [ -x vendor/bin/pest ]; then
-            vendor/bin/pest
+          test -x vendor/bin/phpunit || { echo "::error::vendor/bin/phpunit is missing: the install failed"; exit 1; }
+          test -s "$POLI_CONTRACT" || { echo "::error::API contract file missing: '$POLI_CONTRACT'"; exit 1; }
+          if [ -n "${{ matrix.coverage }}" ]; then
+            vendor/bin/phpunit --testsuite=unit,contract --coverage-clover=coverage.xml
           else
-            echo "No test runner installed — skipping"
+            vendor/bin/phpunit --testsuite=unit,contract
           fi
 
       # Upload only on the single matrix entry that produced coverage.xml.

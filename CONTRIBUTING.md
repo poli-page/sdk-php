@@ -29,6 +29,18 @@ composer ci                # lint + analyse + audit + test (the CI gate)
 The SDK targets PHP 8.3, 8.4, and 8.5; CI runs the full matrix on Linux
 plus one job each on macOS and Windows for the newest version.
 
+## API contract tests
+
+CI also runs `tests/Contract` against the
+[Poli Page API contract](https://github.com/poli-page/api-contract), pinned
+by commit in `.github/workflows/test.yml`: every SDK case of `contract.json`
+runs against a local mock server, through Guzzle and through Symfony
+HttpClient. Without `POLI_CONTRACT` the suite is skipped locally (and fails
+in CI). To run it, download that version's `contract.json` and run
+`POLI_CONTRACT=<path to contract.json> composer test`. Case ids allowed to
+fail are listed, with the reason, in `tests/contract-skip.json`; a key
+`<id>@guzzle` or `<id>@symfony` lists a case for that HTTP client only.
+
 ## Integration tests
 
 Integration tests hit the API at `POLI_PAGE_BASE_URL` (the SDK default,
