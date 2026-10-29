@@ -11,6 +11,7 @@ The SDK now follows the retry policy and the error messages of the [Poli Page AP
 
 - `QUOTA_EXCEEDED` and `OVERAGE_CAP_EXCEEDED` (429) and `STORAGE_ACCESS_DENIED` (502) are no longer retried, and `isRetryable()` returns `false` for them. A queue that requeues on `isRetryable()` now drops these errors at once: handle them by code. See [Retries and idempotency](../../production/retries-and-idempotency/).
 - The predicates read `status` and `errorCode`: a `DOWNLOAD_FAILED` with the storage's 403 is an auth error.
+- `DOWNLOAD_FAILED` is never retryable: `isRetryable()` is `false` for it whatever the storage status (it was `true` for a storage 5xx or 429). Call `documents->get($id)` for a fresh URL and download again.
 - A timeout of the presigned-URL download raises `DOWNLOAD_FAILED`, not `TimeoutException`.
 - `Retry-After` is read as integer seconds or an HTTP-date only; `Retry-After-Ms` is ignored.
 - The package conflicts with symfony/http-client older than 6.2; with Symfony HTTP Client the SDK's `timeout` now bounds each attempt.

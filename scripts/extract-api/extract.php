@@ -424,7 +424,7 @@ function sdkInternalErrors(): array
         ['code' => 'timeout',         'when' => 'The request did not complete within `timeout` (`Request timed out after <ms>ms`). Retryable.'],
         ['code' => 'aborted',         'when' => 'Caller-driven cancellation. Not retryable.'],
         ['code' => 'unknown_error',   'when' => 'A catch-all for unexpected failures.'],
-        ['code' => 'DOWNLOAD_FAILED', 'when' => 'The presigned PDF download failed: `Failed to download PDF: HTTP <status>` with the storage `status`, or `Failed to download PDF: network error` without one (no answer, a timeout, or a connection dropped mid-body). Not retried by the SDK.'],
+        ['code' => 'DOWNLOAD_FAILED', 'when' => 'The presigned PDF download failed: `Failed to download PDF: HTTP <status>` with the storage `status`, or `Failed to download PDF: network error` without one (no answer, a timeout, or a connection dropped mid-body). Never retryable, whatever the storage status.'],
         ['code' => 'INTERNAL_ERROR',  'when' => 'The API answered 5xx, its error body was not JSON or could not be read (`HTTP <status>`, real status kept), or its response had an unexpected shape. Retryable on 5xx and 429.'],
     ];
 }

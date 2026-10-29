@@ -9,6 +9,7 @@ The Poli Page PHP SDK retries transient failures automatically. Every POST carri
 
 - `network_error`, `timeout`, 5xx responses (such as `503 PUBLISH_IN_PROGRESS`) and 429 responses (such as `RATE_LIMIT_EXCEEDED`) are retried.
 - `QUOTA_EXCEEDED` and `OVERAGE_CAP_EXCEEDED` (429) and `STORAGE_ACCESS_DENIED` (502) are **not** retried: they last until the monthly reset or until the bucket access is restored, so the SDK throws them at once and `isRetryable()` is `false`.
+- `DOWNLOAD_FAILED` is never retried and `isRetryable()` is `false` for it, whatever the storage status.
 - Up to `maxRetries` retries (default `2` — three total attempts); after the last one, the last error is thrown.
 - Before retry `n` (1-based) the SDK waits `retryDelay × 2^(n-1) × j` seconds (`retryDelay` defaults to `0.5`), with `j` a random factor in `[0.5, 1.5)`. The wait is never shorter than that.
 - Honors the `Retry-After` response header when present (integer seconds or an HTTP-date), clamped to 0–30 seconds, without jitter. `Retry-After-Ms` is ignored.

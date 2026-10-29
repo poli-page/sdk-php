@@ -7,12 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Conformance with the Poli Page API contract v1.2.0
+Conformance with the Poli Page API contract v1.3.0
 ([poli-page/api-contract](https://github.com/poli-page/api-contract)). See
 [MIGRATION.md](MIGRATION.md#from-0100-to-the-next-release-unreleased).
 
 ### Changed
 
+- **Breaking:** `DOWNLOAD_FAILED` is never retryable, whatever the storage status
+  (was retryable for a storage 5xx or 429). Contract v1.3.0.
 - **Breaking:** `QUOTA_EXCEEDED` and `OVERAGE_CAP_EXCEEDED` (429) and
   `STORAGE_ACCESS_DENIED` (502) are no longer retried, even with a
   `Retry-After` header, and `isRetryable()` now returns `false` for them
@@ -30,8 +32,8 @@ Conformance with the Poli Page API contract v1.2.0
   status: a 401 or 403 is an auth error (an expired presigned URL gets
   403), a 429 a rate-limit error and a 400 a validation error; all three
   were `false` for every `DOWNLOAD_FAILED`. `isRetryable()` of a
-  `DOWNLOAD_FAILED` with a storage 5xx or 429 stays `true`, and the SDK
-  still never retries the download itself.
+  `DOWNLOAD_FAILED` is always `false`, and the SDK never retries the
+  download itself.
 - **Breaking:** a timeout of the presigned-URL download (`downloadPdf()`,
   the second hop of `render->pdf()` / `render->pdfStream()`) raises
   `DOWNLOAD_FAILED` (`Failed to download PDF: network error`, no status,

@@ -129,11 +129,12 @@ class PoliPageException extends \RuntimeException
      * A network error, a timeout, a 5xx or a 429 the SDK retries (SDK spec
      * §9.1). Never `aborted`, and never `QUOTA_EXCEEDED`,
      * `OVERAGE_CAP_EXCEEDED` or `STORAGE_ACCESS_DENIED`: waiting cannot fix
-     * them.
+     * them. A `DOWNLOAD_FAILED` is never retryable either, whatever the
+     * storage status.
      */
     public function isRetryable(): bool
     {
-        if ($this->errorCode === self::ABORTED || in_array($this->errorCode, Constants::NON_RETRYABLE_CODES, true)) {
+        if ($this->errorCode === self::ABORTED || $this->errorCode === self::DOWNLOAD_FAILED || in_array($this->errorCode, Constants::NON_RETRYABLE_CODES, true)) {
             return false;
         }
         if ($this->isNetworkError()) {
