@@ -45,10 +45,11 @@ final class BodyReaderTest extends TestCase
         $before = set_error_handler(static fn (): bool => false);
         restore_error_handler();
 
-        BodyReader::guard(static fn (): string => 'read');
+        BodyReader::read((new Psr17Factory())->createStream('read'));
         try {
-            BodyReader::guard(static fn (): string => throw new \RuntimeException('failed'));
-        } catch (\RuntimeException) {
+            BodyReader::read(new FailingStream('x', new \RuntimeException('dropped'), warn: true));
+            self::fail('Expected the read to fail');
+        } catch (\ErrorException) {
         }
 
         $after = set_error_handler(static fn (): bool => false);
