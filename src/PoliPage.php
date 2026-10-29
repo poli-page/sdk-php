@@ -82,7 +82,7 @@ final class PoliPage implements Transport
      * @param (\Closure(RetryEvent): void)|null     $onRetry      fires before each retry sleep
      * @param (\Closure(PoliPageException): void)|null $onError   fires once at terminal failure
      * @param (\Closure(RequestEvent): void)|null   $onRequest    fires just before each HTTP attempt
-     * @param (\Closure(ResponseEvent): void)|null  $onResponse   fires after each successful 2xx response
+     * @param (\Closure(ResponseEvent): void)|null  $onResponse   fires after each 2xx response, once its body is read
      * @param (\Closure(): float)|null              $jitterSource test hook; default uses mt_rand
      */
     public function __construct(

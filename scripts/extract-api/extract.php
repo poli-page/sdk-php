@@ -120,7 +120,7 @@ function renderErrorCodes(): array
         ...authErrorCodes(), ...writeGateErrorCodes(),
         'RATE_LIMIT_EXCEEDED', 'VALIDATION_ERROR', 'RENDER_BODY_TOO_LARGE',
         'PROJECT_NOT_FOUND', 'PROJECT_NOT_IN_ENVIRONMENT', 'TEMPLATE_NOT_FOUND',
-        'TEMPLATE_ERROR', 'EMPTY_DOCUMENT', 'DOCUMENT_TOO_LARGE', 'RENDER_TIMEOUT',
+        'TEMPLATE_ERROR', 'TEMPLATE_UNSAFE', 'EMPTY_DOCUMENT', 'DOCUMENT_TOO_LARGE', 'RENDER_TIMEOUT',
         'QUOTA_EXCEEDED', 'OVERAGE_CAP_EXCEEDED', 'PUBLISH_IN_PROGRESS',
         ...serverErrorCodes(),
     ];
@@ -419,13 +419,13 @@ MDX;
 function sdkInternalErrors(): array
 {
     return [
-        ['code' => 'invalid_options', 'when' => 'Constructor or method arguments are missing or malformed.'],
-        ['code' => 'network_error',   'when' => 'TCP/TLS-level failure reaching the API. Retryable.'],
-        ['code' => 'timeout',         'when' => 'The request did not complete within `timeout`. Retryable.'],
+        ['code' => 'invalid_options', 'when' => 'Constructor or method arguments are missing or malformed (`apiKey is required`).'],
+        ['code' => 'network_error',   'when' => 'TCP/TLS-level failure reaching the API, or a connection dropped while the answer is read (`Network request failed`; the HTTP library\'s exception is `getPrevious()`). Retryable.'],
+        ['code' => 'timeout',         'when' => 'The request did not complete within `timeout` (`Request timed out after <ms>ms`). Retryable.'],
         ['code' => 'aborted',         'when' => 'Caller-driven cancellation. Not retryable.'],
         ['code' => 'unknown_error',   'when' => 'A catch-all for unexpected failures.'],
-        ['code' => 'DOWNLOAD_FAILED', 'when' => 'The presigned PDF URL returned a non-2xx response.'],
-        ['code' => 'INTERNAL_ERROR',  'when' => 'The API answered 5xx, or its response had an unexpected shape. Retryable on 5xx.'],
+        ['code' => 'DOWNLOAD_FAILED', 'when' => 'The presigned PDF download failed: `Failed to download PDF: HTTP <status>` with the storage `status`, or `Failed to download PDF: network error` without one (no answer, a timeout, or a connection dropped mid-body). Not retried by the SDK.'],
+        ['code' => 'INTERNAL_ERROR',  'when' => 'The API answered 5xx, its error body was not JSON or could not be read (`HTTP <status>`, real status kept), or its response had an unexpected shape. Retryable on 5xx and 429.'],
     ];
 }
 
@@ -466,6 +466,7 @@ function apiErrorGroups(): array
             ['code' => 'MISSING_TEMPLATE_SLUG',         'when' => 'The template slug is missing.'],
             ['code' => 'PROJECT_REQUIRED_FOR_DOCUMENT', 'when' => 'A render was called with an empty `project`.'],
             ['code' => 'TEMPLATE_ERROR',                'when' => 'The engine rejected the template or its data.'],
+            ['code' => 'TEMPLATE_UNSAFE',               'when' => 'The template, a partial or an SVG asset holds an injection attempt; the message (`detail`) names it. Not retryable.'],
             ['code' => 'EMPTY_DOCUMENT',                'when' => 'The render produced zero pages.'],
             ['code' => 'ENVIRONMENT_MISMATCH',          'when' => 'The request named another environment than the key\'s. The SDK never sends one.'],
             ['code' => 'RENDER_BODY_TOO_LARGE',         'when' => 'The request body is over the API\'s size limit.'],
@@ -473,11 +474,11 @@ function apiErrorGroups(): array
         ],
         'Rate and quota' => [
             ['code' => 'RATE_LIMIT_EXCEEDED',  'when' => 'Too many requests for this key. Retryable.'],
-            ['code' => 'QUOTA_EXCEEDED',       'when' => 'The organization\'s monthly quota is reached. Retryable.'],
-            ['code' => 'OVERAGE_CAP_EXCEEDED', 'when' => 'The overage cap is reached. Retryable.'],
+            ['code' => 'QUOTA_EXCEEDED',       'when' => 'The organization\'s monthly quota is reached. Not retryable: it lasts until the monthly reset.'],
+            ['code' => 'OVERAGE_CAP_EXCEEDED', 'when' => 'The overage cap is reached (paid tiers). Not retryable: it lasts until the monthly reset.'],
         ],
         'Server' => [
-            ['code' => 'STORAGE_ACCESS_DENIED', 'when' => 'The organization\'s own storage bucket refuses access. Retryable.'],
+            ['code' => 'STORAGE_ACCESS_DENIED', 'when' => 'The organization\'s own storage bucket refuses access (502). Not retryable: restore the bucket role, then call again.'],
             ['code' => 'PUBLISH_IN_PROGRESS',   'when' => 'The project is being published into this environment; honours `Retry-After`. Retryable.'],
             ['code' => 'RENDER_TIMEOUT',        'when' => 'The engine\'s time budget expired. Retryable.'],
         ],

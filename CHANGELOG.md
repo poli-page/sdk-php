@@ -7,6 +7,113 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Conformance with the Poli Page API contract v1.2.0
+([poli-page/api-contract](https://github.com/poli-page/api-contract)). See
+[MIGRATION.md](MIGRATION.md#from-0100-to-the-next-release-unreleased).
+
+### Changed
+
+- **Breaking:** `QUOTA_EXCEEDED` and `OVERAGE_CAP_EXCEEDED` (429) and
+  `STORAGE_ACCESS_DENIED` (502) are no longer retried, even with a
+  `Retry-After` header, and `isRetryable()` now returns `false` for them
+  (it returned `true` for any 429 or 5xx). They last until the monthly
+  reset or until the bucket access is restored, so the SDK used to wait
+  up to 30 s per retry for nothing. `RATE_LIMIT_EXCEEDED` and every other
+  429 and 5xx are still retried. Code that requeues on `isRetryable()`
+  stops requeueing these three.
+- **Breaking:** the error predicates read `status` and `errorCode`, as the
+  SDK specification defines them, instead of the exception class:
+  `isAuthError()` is `status` 401 or 403, `isRateLimitError()` 429,
+  `isValidationError()` 400, and `isNetworkError()` is `errorCode`
+  `network_error` or `timeout`. For API errors only the never-retried
+  codes above change. A `DOWNLOAD_FAILED` now follows the storage's
+  status: a 401 or 403 is an auth error (an expired presigned URL gets
+  403), a 429 a rate-limit error and a 400 a validation error; all three
+  were `false` for every `DOWNLOAD_FAILED`. `isRetryable()` of a
+  `DOWNLOAD_FAILED` with a storage 5xx or 429 stays `true`, and the SDK
+  still never retries the download itself.
+- **Breaking:** a timeout of the presigned-URL download (`downloadPdf()`,
+  the second hop of `render->pdf()` / `render->pdfStream()`) raises
+  `DOWNLOAD_FAILED` (`Failed to download PDF: network error`, no status,
+  not retryable) instead of a `TimeoutException` (`timeout`, retryable).
+  Every download failure is now `DOWNLOAD_FAILED`.
+- `Retry-After` is read as integer seconds or an HTTP-date (IMF-fixdate,
+  RFC 850 or asctime) only. Any other value (`1.5`, `-1`, `soon`,
+  `tomorrow`, `+1 hour`) falls back to the backoff instead of being parsed
+  as a float or by `strtotime()`; an integer too large for PHP's `int`
+  clamps to the 30 s cap; an HTTP-date's delay keeps sub-second precision.
+  `Retry-After-Ms` is ignored, as before.
+- The backoff's random factor is in `[0.5, 1.5)` (it could reach 1.5).
+- SDK error messages are the exact texts of the SDK specification:
+  - `network_error`: `Network request failed` (was the HTTP library's
+    exception text); that exception is still `getPrevious()`.
+  - `timeout`: `Request timed out after <ms>ms`, the attempt's timeout in
+    milliseconds (was `Request timed out after <s>s: <library text>`).
+  - `DOWNLOAD_FAILED`: `Failed to download PDF: HTTP <status>` (was
+    `Failed to download PDF: <status> <reason phrase>`), and
+    `Failed to download PDF: network error` when the download gets no
+    complete answer (was the HTTP library's text, now `getPrevious()`).
+  - An error answer whose body is not JSON: `HTTP <status>` (was
+    `HTTP <status>: response body was not valid JSON`); the code is still
+    `INTERNAL_ERROR` with the real status.
+  - `PROJECT_REQUIRED_FOR_DOCUMENT` raised before any request:
+    `project is required` (was
+    `project is required for render.document / render.pdf / render.pdfStream`).
+- An API answer's whole body is read inside its attempt. With a client
+  that streams the body lazily (Symfony HttpClient), a 2xx cut mid-body
+  used to surface after the retry loop, as a PHP warning followed by the
+  PSR-7 stream's raw `RuntimeException` (not a `PoliPageException`, not
+  retried); it is now a
+  `network_error` (`Network request failed`, the read error as
+  `getPrevious()`), or a `timeout` when the body stalls past the client's
+  timeout, and both are retried. A render whose 2xx answer is cut was
+  already stored by the API, so its retry can store a second document.
+  With Guzzle the body was already read within the attempt.
+- An error answer whose body fails while it is read is handled as a body
+  that is not JSON: `INTERNAL_ERROR`, `HTTP <status>`, the real status and
+  `x-request-id`, the read error as `getPrevious()`, and retried by its
+  status (a 503 yes, a 400 no). It never takes a code from the bytes
+  received so far.
+- `onResponse` fires once the 2xx body is read, and its `durationMs`
+  covers the body; it never fires for a 2xx whose body failed.
+
+### Fixed
+
+- A POST (`render->*`, `documents->thumbnails()`) is never resent behind
+  the SDK's back. libcurl, under Guzzle's curl handler and Symfony's
+  `CurlHttpClient`, sent it again on a fresh connection when it went out
+  on a reused keep-alive connection that died before any answer: that
+  attempt was not counted by `maxRetries` nor reported to `onRequest`,
+  and as the API does not deduplicate on `Idempotency-Key`, a render
+  could be stored twice. A POST now always opens a fresh connection with
+  Guzzle and Symfony HttpClient, so the failure surfaces as
+  `network_error` and goes through the SDK's own retry. A GET or DELETE
+  may still be resent once by libcurl, which stores nothing.
+- A failure while the PDF body is read no longer escapes as the HTTP
+  library's exception or a PHP warning: `render->pdf()`, `downloadPdf()`
+  and reads of the `render->pdfStream()` stream raise `DOWNLOAD_FAILED`
+  with `Failed to download PDF: network error` and the read error as
+  `getPrevious()`.
+- A retry wait is never shorter than its delay: when `usleep()` returns
+  early, the SDK sleeps again for the rest, on the monotonic clock.
+- Docs: the retries page and the README no longer claim the API
+  deduplicates on `Idempotency-Key`. It does not: the key is stable
+  across the retries of one call, and a render retried after a late 5xx,
+  a `timeout` or a `network_error` can store a second document. The
+  README no longer says the SDK applies its `timeout` to Symfony
+  HttpClient: it does so through Guzzle's request options only.
+
+### Added
+
+- Known error code `TEMPLATE_UNSAFE` (400: the template, a partial or an
+  SVG asset holds an injection attempt; the message names it; not
+  retried), next to `TEMPLATE_ERROR`.
+- `tests/Contract` runs every SDK case of the API contract against a
+  local mock server, through Guzzle and Symfony HttpClient; CI pins the
+  contract by commit (`poli-page/api-contract` action) and Dependabot
+  proposes each new version. Run it locally with
+  `POLI_CONTRACT=<path to contract.json> composer test`.
+
 ## [0.10.0] - 2026-10-27
 
 Environments: an API key belongs to one environment (`pp_sandbox_…`,

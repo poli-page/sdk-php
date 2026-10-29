@@ -5,6 +5,16 @@ description: Upgrade guides for the breaking releases of the PHP SDK.
 
 This page tracks breaking changes between versions of `poli-page/sdk`. For the full per-release diff, see the [changelog](../changelog/).
 
+## From 0.10.0 to the next release (unreleased)
+
+The SDK now follows the retry policy and the error messages of the [Poli Page API contract](https://github.com/poli-page/api-contract). The full guide is in [`MIGRATION.md` in the repo](https://github.com/poli-page/sdk-php/blob/main/MIGRATION.md).
+
+- `QUOTA_EXCEEDED` and `OVERAGE_CAP_EXCEEDED` (429) and `STORAGE_ACCESS_DENIED` (502) are no longer retried, and `isRetryable()` returns `false` for them. A queue that requeues on `isRetryable()` now drops these errors at once: handle them by code. See [Retries and idempotency](../../production/retries-and-idempotency/).
+- The predicates read `status` and `errorCode`: a `DOWNLOAD_FAILED` with the storage's 403 is an auth error.
+- A timeout of the presigned-URL download raises `DOWNLOAD_FAILED`, not `TimeoutException`.
+- `Retry-After` is read as integer seconds or an HTTP-date only; `Retry-After-Ms` is ignored.
+- The SDK-side messages are the specification's exact texts (`Network request failed`, `Request timed out after <ms>ms`, `Failed to download PDF: HTTP <status>`, `Failed to download PDF: network error`, `HTTP <status>` for an error body that is not JSON, `project is required`). Match `errorCode`, not the message. See [Errors](../../production/errors/).
+
 ## From 0.9.x
 
 An API key now belongs to one environment (`pp_sandbox_…`, `pp_live_…`, `pp_staging_…`) and every render uses the project's copy published in that environment. The release removes, with no deprecation window:

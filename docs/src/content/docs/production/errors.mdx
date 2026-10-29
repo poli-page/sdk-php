@@ -7,6 +7,8 @@ import ErrorTable from '@preset/components/ErrorTable.astro';
 
 Every failure thrown by the SDK is a `PoliPage\PoliPageException` (which extends `RuntimeException`). The `errorCode` property tells you what went wrong; the `requestId` property is what to quote when filing a support ticket. Specialized subclasses under `PoliPage\Exception\*` let you `catch` by HTTP status family.
 
+The predicates read `status` and `errorCode`, the same in every Poli Page SDK: `isAuthError()` is `status` 401 or 403, `isRateLimitError()` 429, `isValidationError()` 400, `isNetworkError()` is `errorCode` `network_error` or `timeout`, and `isRetryable()` is a network error, a timeout, a 5xx or a 429, except `QUOTA_EXCEEDED`, `OVERAGE_CAP_EXCEEDED` and `STORAGE_ACCESS_DENIED`. A `DOWNLOAD_FAILED` carries the storage's status, so a 403 from storage is an auth error.
+
 ## The exception class
 
 ```php
@@ -31,8 +33,10 @@ These originate inside the SDK before any HTTP call (or in response to a network
 
 <ErrorTable errors={[
   { code: 'invalid_options', when: 'Constructor arguments are missing or malformed (empty apiKey, undiscoverable PSR-18 client), or, at request time, apiKey or idempotencyKey is not a valid HTTP header value (it contains CR, LF, NUL or another control character other than tab, such as a trailing newline). The message never contains the value.', recovery: 'Fix the call site. Not retried.' },
-  { code: 'network_error', when: 'TCP/TLS-layer failure reaching the API. Surfaced via Exception\\ConnectionException.', recovery: 'Automatically retried up to maxRetries times.' },
-  { code: 'timeout', when: 'The request did not complete within the configured `timeout`. Surfaced via Exception\\TimeoutException.', recovery: 'Automatically retried up to maxRetries times. Raise `timeout` if it keeps tripping.' },
+  { code: 'network_error', when: 'TCP/TLS-layer failure reaching the API, including a connection dropped while the answer is read. The message is `Network request failed`; the HTTP library\'s exception is `getPrevious()`. Surfaced via Exception\\ConnectionException.', recovery: 'Automatically retried up to maxRetries times.' },
+  { code: 'timeout', when: 'The request did not complete within the configured `timeout`. The message is `Request timed out after <ms>ms`. Surfaced via Exception\\TimeoutException.', recovery: 'Automatically retried up to maxRetries times. Raise `timeout` if it keeps tripping.' },
+  { code: 'DOWNLOAD_FAILED', when: 'The presigned-URL download (`downloadPdf()`, the second hop of `render->pdf()` / `render->pdfStream()`) failed: `Failed to download PDF: HTTP <status>` with the storage `status` (an expired URL gets 403), or `Failed to download PDF: network error` without one, also on a timeout and when the connection drops while the body or the `pdfStream()` stream is read.', recovery: 'Not retried. Call `documents->get($id)` for a fresh URL — presigned URLs expire after 15 minutes.' },
+  { code: 'PROJECT_REQUIRED_FOR_DOCUMENT', when: 'An empty `project`, before any request. The message is `project is required`.', recovery: 'Pass the project slug.' },
   { code: 'aborted', when: 'A future cancellation primitive aborted the request.', recovery: 'Not retryable. Surface to the caller.' },
 ]} />
 
@@ -51,10 +55,14 @@ Returned by the Poli Page API. Uppercase, snake-case. The SDK forwards the code 
   { code: 'VALIDATION_ERROR', when: 'The request body failed validation.', recovery: 'Read the error message; fix the input.' },
   { code: 'MISSING_DATA', when: 'The request body lacks a required `data` field.', recovery: 'Pass `data: []` (or with values) on every render call.' },
   { code: 'RATE_LIMIT_EXCEEDED', when: 'Too many requests for this key.', recovery: 'Automatically retried; slow down sustained bursts.' },
-  { code: 'QUOTA_EXCEEDED', when: 'The organization\'s monthly quota is reached.', recovery: 'Automatically retried; bump tier for sustained higher volume.' },
+  { code: 'QUOTA_EXCEEDED', when: 'The organization\'s monthly quota is reached (429).', recovery: 'Not retried: it lasts until the monthly reset. Upgrade the tier for more renders.' },
+  { code: 'OVERAGE_CAP_EXCEEDED', when: 'The organization reached its overage cap (429, paid tiers).', recovery: 'Not retried: it lasts until the monthly reset. Raise the cap in the dashboard.' },
+  { code: 'STORAGE_ACCESS_DENIED', when: 'The organization\'s own storage bucket refuses access (502).', recovery: 'Not retried: restore the bucket role, then call again.' },
+  { code: 'TEMPLATE_ERROR', when: 'The engine rejected the template or its data (400).', recovery: 'Fix the template or the data.' },
+  { code: 'TEMPLATE_UNSAFE', when: 'The template, a partial or an SVG asset holds an injection attempt (400); the message (`detail`) names it.', recovery: 'Not retried. Remove the unsafe content and publish the project again.' },
   { code: 'ORGANIZATION_PAYMENT_GRACE', when: 'The organization\'s billing is past due; writes are refused.', recovery: 'Update the payment method in the dashboard.' },
   { code: 'PUBLISH_IN_PROGRESS', when: 'The project is being published into this environment.', recovery: 'Automatically retried, honouring `Retry-After`.' },
-  { code: 'INTERNAL_ERROR', when: 'The API returned 5xx.', recovery: 'Automatically retried; contact support if it persists.' },
+  { code: 'INTERNAL_ERROR', when: 'The API returned 5xx. Also the code of an error answer whose body is not JSON (a gateway page) or could not be read to its end, with its real status and the message `HTTP <status>`.', recovery: 'Automatically retried when the status is 5xx or 429; contact support if it persists.' },
 ]} />
 
 The full list of API codes lives in [the reference](../../reference/errors/).
@@ -80,7 +88,8 @@ try {
         data: ['invoiceNumber' => 'INV-001'],
     ));
 } catch (RateLimitException $e) {
-    // Custom strategy on top of the SDK's built-in retries.
+    // RATE_LIMIT_EXCEEDED outlasted the retries, or QUOTA_EXCEEDED /
+    // OVERAGE_CAP_EXCEEDED, which the SDK never retries: queue the job for later.
     sleep(30);
     throw $e;
 } catch (PoliPageException $e) {
