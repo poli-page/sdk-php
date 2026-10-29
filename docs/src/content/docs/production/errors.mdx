@@ -7,7 +7,7 @@ import ErrorTable from '@preset/components/ErrorTable.astro';
 
 Every failure thrown by the SDK is a `PoliPage\PoliPageException` (which extends `RuntimeException`). The `errorCode` property tells you what went wrong; the `requestId` property is what to quote when filing a support ticket. Specialized subclasses under `PoliPage\Exception\*` let you `catch` by HTTP status family.
 
-The predicates read `status` and `errorCode`, the same in every Poli Page SDK: `isAuthError()` is `status` 401 or 403, `isRateLimitError()` 429, `isValidationError()` 400, `isNetworkError()` is `errorCode` `network_error` or `timeout`, and `isRetryable()` is a network error, a timeout, a 5xx or a 429, except `QUOTA_EXCEEDED`, `OVERAGE_CAP_EXCEEDED` and `STORAGE_ACCESS_DENIED`. A `DOWNLOAD_FAILED` carries the storage's status, so a 403 from storage is an auth error.
+The predicates read `status` and `errorCode`, the same in every Poli Page SDK: `isAuthError()` is `status` 401 or 403, `isRateLimitError()` 429, `isValidationError()` 400, `isNetworkError()` is `errorCode` `network_error` or `timeout`, and `isRetryable()` is a network error, a timeout, a 5xx or a 429, except `QUOTA_EXCEEDED`, `OVERAGE_CAP_EXCEEDED` and `STORAGE_ACCESS_DENIED`; a `DOWNLOAD_FAILED` is never retryable, whatever the storage status. A `DOWNLOAD_FAILED` carries the storage's status, so a 403 from storage is an auth error.
 
 ## The exception class
 

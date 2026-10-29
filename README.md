@@ -291,7 +291,8 @@ if ($e->isRateLimitError())  { /* status 429 */ }
 if ($e->isValidationError()) { /* status 400 */ }
 if ($e->isNetworkError())    { /* errorCode network_error or timeout */ }
 if ($e->isRetryable())       { /* 5xx, 429, network, timeout — SDK already retried;
-                                  never QUOTA_EXCEEDED, OVERAGE_CAP_EXCEEDED, STORAGE_ACCESS_DENIED */ }
+                                  never QUOTA_EXCEEDED, OVERAGE_CAP_EXCEEDED, STORAGE_ACCESS_DENIED,
+                                  DOWNLOAD_FAILED */ }
 ```
 
 For lifecycle and billing failures, route the user to actionable messages rather than treating them as opaque errors:

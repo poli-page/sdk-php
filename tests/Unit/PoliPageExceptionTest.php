@@ -142,7 +142,10 @@ final class PoliPageExceptionTest extends TestCase
         self::assertTrue((new PoliPageException('m', PoliPageException::DOWNLOAD_FAILED, 401))->isAuthError());
         self::assertTrue((new PoliPageException('m', PoliPageException::DOWNLOAD_FAILED, 429))->isRateLimitError());
         self::assertTrue((new PoliPageException('m', PoliPageException::DOWNLOAD_FAILED, 400))->isValidationError());
-        self::assertTrue((new PoliPageException('m', PoliPageException::DOWNLOAD_FAILED, 503))->isRetryable());
+        self::assertFalse((new PoliPageException('m', PoliPageException::DOWNLOAD_FAILED, 503))->isRetryable());
+        self::assertFalse((new PoliPageException('m', PoliPageException::DOWNLOAD_FAILED, 429))->isRetryable());
+        // An API 503 still is retryable.
+        self::assertTrue((new InternalServerException('m', 'INTERNAL_ERROR', 503))->isRetryable());
     }
 
     public function testDownloadFailedWithoutStatusIsNeitherNetworkNorRetryable(): void
