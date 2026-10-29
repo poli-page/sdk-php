@@ -5,7 +5,8 @@
 #   1. Pre-flight checks (clean working tree, on `main`, branch up-to-date,
 #      tag doesn't already exist, VERSION constant matches the requested tag).
 #   2. Runs the full CI gate locally: composer validate, lint, phpstan,
-#      composer audit, phpunit unit suite.
+#      composer audit, the phpunit unit suite and the API contract suite
+#      against the contract version CI pins.
 #   3. Prompts for confirmation, then creates a signed annotated tag
 #      `vX.Y.Z` locally — never pushes for you.
 #
@@ -135,8 +136,23 @@ ok "lint clean"
 vendor/bin/phpstan analyse --no-progress
 ok "static analysis clean"
 
-vendor/bin/phpunit --testsuite=unit
-ok "unit tests passing"
+# The contract suite runs the API contract cases. Use the contract version CI
+# pins, unless POLI_CONTRACT already names a contract.json.
+contract_sha="$(sed -n 's|.*uses: poli-page/api-contract@\([0-9a-f]\{40\}\).*|\1|p' .github/workflows/test.yml | head -n 1)"
+[ -n "$contract_sha" ] || fail "no poli-page/api-contract pin found in .github/workflows/test.yml"
+if [ -z "${POLI_CONTRACT:-}" ]; then
+    POLI_CONTRACT="$(mktemp -d)/contract.json"
+    curl -fsSL "https://raw.githubusercontent.com/poli-page/api-contract/$contract_sha/contract.json" -o "$POLI_CONTRACT" \
+        || fail "could not download the API contract $contract_sha; set POLI_CONTRACT to its contract.json"
+    ok "API contract: the version CI pins ($contract_sha)"
+else
+    echo "    $(dim "API contract: POLI_CONTRACT=$POLI_CONTRACT overrides the version CI pins ($contract_sha)")"
+fi
+[ -s "$POLI_CONTRACT" ] || fail "API contract file missing or empty: $POLI_CONTRACT"
+export POLI_CONTRACT
+# CI=true: the contract suite fails instead of skipping without POLI_CONTRACT.
+CI=true vendor/bin/phpunit --testsuite=unit,contract
+ok "unit and contract tests passing"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tag
