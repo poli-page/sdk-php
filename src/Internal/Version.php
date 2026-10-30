@@ -6,7 +6,7 @@ namespace PoliPage\Internal;
 
 /**
  * Runtime SDK version. Bumped manually as part of the release flow
- * (sdk-php.md §12.5). Exposed as a constant so static analyzers and tests
+ * (see CONTRIBUTING.md). Exposed as a constant so static analyzers and tests
  * can assert against it without instantiation.
  *
  * @internal

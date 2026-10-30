@@ -15,7 +15,7 @@ namespace PoliPage;
  *
  * Free function rather than a method so callers can use it without
  * importing a `Node`-specific helper class — matches the SDK spec's
- * `renderToFile` (sdk-php.md §2). The Composer autoload entry under
+ * `renderToFile`. The Composer autoload entry under
  * `"files"` loads this file on every request.
  *
  * @example
