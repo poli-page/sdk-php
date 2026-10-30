@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-30
+
 Conformance with the Poli Page API contract v1.3.0
 ([poli-page/api-contract](https://github.com/poli-page/api-contract)). See
-[MIGRATION.md](MIGRATION.md#from-0100-to-the-next-release-unreleased).
+[MIGRATION.md](MIGRATION.md#from-0100-to-0110).
 
 ### Changed
 
@@ -295,6 +297,7 @@ breaking changes may still land before 1.0.0.
   macOS and Windows for 8.5. `composer validate --strict`,
   `composer audit`, lint, static analysis, and unit tests all gated.
 
-[Unreleased]: https://github.com/poli-page/sdk-php/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/poli-page/sdk-php/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/poli-page/sdk-php/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/poli-page/sdk-php/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/poli-page/sdk-php/releases/tag/v0.9.0
