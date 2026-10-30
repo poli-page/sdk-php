@@ -5,7 +5,7 @@ The package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
 before 1.0.0 a breaking change ships in a minor bump (0.9.x → 0.10.0), from
 1.0.0 on only in a major bump, and it always comes with an entry here.
 
-## From 0.10.0 to the next release (unreleased)
+## From 0.10.0 to 0.11.0
 
 The SDK now follows the retry policy and the error messages of the Poli
 Page API contract.
@@ -28,7 +28,7 @@ two 429s, and `catch (RateLimitException $e)` still catches them.
     }
 }
 
-// next release
+// 0.11.0
 } catch (PoliPageException $e) {
     if (in_array($e->errorCode, [PoliPageException::QUOTA_EXCEEDED, PoliPageException::OVERAGE_CAP_EXCEEDED], true)) {
         $queue->holdUntilMonthlyReset($job);

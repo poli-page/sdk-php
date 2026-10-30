@@ -52,8 +52,9 @@ scripts/extract-api/composer.lock
 coverage/
 .coverage/
 
-# Claude Code agent state (project-local settings, scheduled-task lock)
+# Local agent state and private working notes: kept out of this repo.
 .claude/
+/CLAUDE.md
 
 # Internal authoring notes — kept locally for cross-language porting, never
 # committed to the public SDK repo (they reference absolute paths on the

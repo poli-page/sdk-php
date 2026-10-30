@@ -5,8 +5,7 @@ Thanks for your interest. A few short rules:
 ## Working method
 
 We use **TDD**: write a failing test first, then the minimum code to pass.
-See `CLAUDE.md` at the repo root for the full methodology and the
-`sdk-engineering-guide.md` upstream for cross-SDK policy.
+The test suites and the lint and static-analysis gates are described below.
 
 ## Commit messages
 
