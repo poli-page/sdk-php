@@ -69,9 +69,11 @@ order called out by the cross-SDK porter checklist; see
 
 ## Releasing
 
-Releases are **manual** and gated by `scripts/release.sh`. Packagist
-auto-publishes on tag push via its GitHub webhook — there is no
-separate publish step. The script runs every CI gate locally, prompts
+Releases are **manual** and gated by `scripts/release.sh`. Pushing the tag
+starts the `Release` workflow (`.github/workflows/release.yml`), which
+re-runs the test matrix and a version check, then waits for a reviewer to
+approve the `packagist-release` Environment before it pings Packagist
+and creates the GitHub Release. There is no Packagist webhook. The script runs every CI gate locally, prompts
 for confirmation, and creates a local annotated tag; pushing the tag
 is left to you so you stay in the loop.
 
@@ -85,7 +87,8 @@ is left to you so you stay in the loop.
    ./scripts/release.sh              # interactive
    ```
 6. Push the tag when ready: `git push origin vX.Y.Z`.
-7. Packagist's webhook indexes the new version within seconds.
+7. Approve the `packagist-release` deployment when the workflow pauses; the
+   workflow then notifies Packagist, which indexes the version within seconds.
 
 ### Local pre-push hook
 
