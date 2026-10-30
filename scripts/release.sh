@@ -15,9 +15,10 @@
 #     ./scripts/release.sh 1.2.3           # explicit
 #     ./scripts/release.sh 1.2.3 --dry-run # everything except the tag
 #
-# Packagist auto-indexes via the configured GitHub webhook within seconds
-# of `git push origin vX.Y.Z`. There is no separate `composer publish`
-# command — push the tag yourself when ready.
+# Pushing the tag (`git push origin vX.Y.Z`) starts the Release workflow, which
+# pauses for approval of the `packagist-release` Environment and then pings
+# Packagist. There is no Packagist webhook and no `composer publish` command
+# — push the tag yourself when ready.
 
 set -euo pipefail
 
@@ -179,4 +180,5 @@ echo
 echo "$(bold "Next:") push the tag when you're ready:"
 echo "    $(cyan "git push origin $tag")"
 echo
-echo "Packagist's GitHub webhook indexes the new version within ~seconds."
+echo "The Release workflow then waits for approval of the packagist-release"
+echo "Environment before notifying Packagist."
