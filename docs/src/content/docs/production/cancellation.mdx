@@ -20,7 +20,9 @@ $pdf = $client->render->pdf(new RenderInput(
 ));
 ```
 
-When the deadline trips on an API call, the SDK raises a `PoliPage\Exception\TimeoutException` (which extends `ConnectionException`) with the message `Request timed out after <ms>ms`. Timeouts are retried up to `maxRetries` times. The presigned-URL download of `render->pdf()` and `downloadPdf()` is the exception: it is never retried, and a timeout there raises `DOWNLOAD_FAILED` (`Failed to download PDF: network error`).
+When the deadline trips on an API call, the SDK raises a `PoliPage\Exception\TimeoutException` (which extends `ConnectionException`) with the message `Request timed out after <ms>ms`. Timeouts are retried up to `maxRetries` times.
+
+The same timeout bounds the presigned-URL download: the whole download for `render->pdf()` and `downloadPdf()`, and, for `render->pdfStream()`, the wait for the first byte and each gap between two chunks (an idle timeout, so a large PDF read at your pace is not cut off). The download is never retried, and a timeout there raises `DOWNLOAD_FAILED` with the message `Failed to download PDF: timeout` and no status.
 
 ## HTTP-client cancellation
 

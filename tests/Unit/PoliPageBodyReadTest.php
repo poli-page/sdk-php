@@ -167,7 +167,25 @@ final class PoliPageBodyReadTest extends TestCase
         }
     }
 
-    public function testDownloadWithoutAnAnswerIsDownloadFailedEvenOnATimeout(): void
+    public function testDownloadWithoutAnAnswerIsDownloadFailedWithTheNetworkMessage(): void
+    {
+        $refused = new class ('cURL error 7: Failed to connect to s3.example.com port 443') extends \RuntimeException implements ClientExceptionInterface {
+        };
+        $this->mock->addException($refused);
+
+        try {
+            $this->client()->fetchBytes('https://s3.example.com/doc.pdf?sig=x', 5.0);
+            self::fail('Expected DOWNLOAD_FAILED');
+        } catch (PoliPageException $e) {
+            self::assertSame(PoliPageException::DOWNLOAD_FAILED, $e->errorCode);
+            self::assertSame('Failed to download PDF: network error', $e->getMessage());
+            self::assertNull($e->status);
+            self::assertSame($refused, $e->getPrevious());
+            self::assertFalse($e->isRetryable(), 'the download is never retried');
+        }
+    }
+
+    public function testDownloadTimeoutIsDownloadFailedWithTheTimeoutMessage(): void
     {
         $timeout = new class ('cURL error 28: Operation timed out') extends \RuntimeException implements ClientExceptionInterface {
         };
@@ -178,7 +196,8 @@ final class PoliPageBodyReadTest extends TestCase
             self::fail('Expected DOWNLOAD_FAILED');
         } catch (PoliPageException $e) {
             self::assertSame(PoliPageException::DOWNLOAD_FAILED, $e->errorCode);
-            self::assertSame('Failed to download PDF: network error', $e->getMessage());
+            self::assertSame('Failed to download PDF: timeout', $e->getMessage());
+            self::assertFalse($e->isNetworkError(), 'a download timeout is DOWNLOAD_FAILED, not timeout');
             self::assertNull($e->status);
             self::assertSame($timeout, $e->getPrevious());
             self::assertFalse($e->isRetryable(), 'the download is never retried');

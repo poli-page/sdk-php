@@ -53,15 +53,18 @@ interface Transport
 
     /**
      * Fetch the body bytes of an arbitrary URL — used to download PDFs from
-     * presigned S3 URLs. No auth, no retry. Throws PoliPageException with
-     * code DOWNLOAD_FAILED on transport failure or non-2xx response.
+     * presigned S3 URLs. No auth, no retry. `$timeout` (`null`: the client's)
+     * bounds the whole download. Throws PoliPageException with code
+     * DOWNLOAD_FAILED on transport failure, timeout or non-2xx response.
      */
     public function fetchBytes(string $url, ?float $timeout): string;
 
     /**
      * Like {@see fetchBytes} but returns the PSR-7 stream directly so the
-     * caller can pipe it to disk / a response without buffering. The caller
-     * owns the stream's lifecycle and is responsible for closing it.
+     * caller can pipe it to disk / a response without buffering. `$timeout`
+     * is an idle timeout here: the wait for the first byte and each gap
+     * between two chunks. The caller owns the stream's lifecycle and is
+     * responsible for closing it.
      */
     public function streamBytes(string $url, ?float $timeout): StreamInterface;
 }

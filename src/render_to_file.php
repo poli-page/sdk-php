@@ -4,18 +4,24 @@ declare(strict_types=1);
 
 namespace PoliPage;
 
+use PoliPage\Internal\AtomicFileWriter;
+use PoliPage\Internal\Http\DownloadStream;
+
 /**
  * Render a PDF and stream the bytes to `$path`. Creates parent directories
  * if missing. Overwrites existing files. Memory-bounded — reads from the
  * PSR-7 body stream in 8 KB chunks regardless of document size.
  *
- * On short-write (disk full, quota exceeded), the partial file is removed
- * and a `PoliPageException` is thrown — never leaves a truncated PDF on
- * disk.
+ * The bytes go to a temporary file in the same directory, renamed over
+ * `$path` only once the PDF is complete: when anything fails, `$path` is left
+ * untouched (an existing file keeps its content, a missing one is not
+ * created) and the temporary file is removed. The directory and the
+ * temporary file are prepared before the render, so a path that cannot be
+ * written costs no render.
  *
  * Free function rather than a method so callers can use it without
- * importing a `Node`-specific helper class — matches the SDK spec's
- * `renderToFile`. The Composer autoload entry under
+ * importing a `Node`-specific helper class — matches the `renderToFile`
+ * helper of the other Poli Page SDKs. The Composer autoload entry under
  * `"files"` loads this file on every request.
  *
  * @example
@@ -33,57 +39,34 @@ namespace PoliPage;
  * ), 'invoice.pdf');
  * ```
  *
- * @throws PoliPageException with code INVALID_OPTIONS when the parent directory cannot be created,
- *                                   the destination file cannot be opened, or a write fails partway
- *                                   through (in which case the partial file is removed)
+ * @throws PoliPageException with code IO_ERROR (`io_error`) when the file cannot be written:
+ *                                   creating a parent directory, opening, writing or renaming it
+ *                                   into place. No status, the message
+ *                                   `Failed to write PDF: <reason>` with PHP's own error text,
+ *                                   and that error as `getPrevious()`. Never retried
  * @throws PoliPageException any failure mode of `$client->render->pdfStream($input)` propagates
  */
 function renderToFile(PoliPage $client, RenderInput $input, string $path): void
 {
-    $dir = \dirname($path);
-    if (!is_dir($dir) && !mkdir($dir, 0o755, recursive: true) && !is_dir($dir)) {
-        throw new PoliPageException(
-            "Failed to create directory: {$dir}",
-            PoliPageException::INVALID_OPTIONS,
-        );
-    }
-
-    $stream = $client->render->pdfStream($input);
-
-    $file = fopen($path, 'wb');
-    if ($file === false) {
-        throw new PoliPageException(
-            "Failed to open file for writing: {$path}",
-            PoliPageException::INVALID_OPTIONS,
-        );
-    }
-
-    $fullyWritten = false;
+    $file = AtomicFileWriter::open($path);
+    $stream = null;
     try {
+        $stream = $client->render->pdfStream($input);
         while (!$stream->eof()) {
             $chunk = $stream->read(8192);
             if ($chunk === '') {
                 break;
             }
-            $bytesWritten = fwrite($file, $chunk);
-            if ($bytesWritten === false || $bytesWritten !== strlen($chunk)) {
-                throw new PoliPageException(
-                    sprintf(
-                        'Short write to %s (wrote %s of %d bytes — disk full?)',
-                        $path,
-                        $bytesWritten === false ? 'unknown' : (string) $bytesWritten,
-                        strlen($chunk),
-                    ),
-                    PoliPageException::INVALID_OPTIONS,
-                );
-            }
+            $file->write($chunk);
         }
-        $fullyWritten = true;
+        // An empty read short of the end is a download that stopped: never
+        // commit what came before it.
+        if (!$stream->eof()) {
+            throw DownloadStream::failure(new \RuntimeException('The PDF download stopped before its end'));
+        }
+        $file->commit();
     } finally {
-        fclose($file);
-        $stream->close();
-        if (!$fullyWritten && is_file($path)) {
-            @unlink($path);
-        }
+        $stream?->close();
+        $file->discard();
     }
 }

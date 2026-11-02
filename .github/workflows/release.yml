@@ -4,12 +4,13 @@ name: Release
 # published the moment the package's update API is pinged (or its webhook
 # fires). To keep a human in the loop we deliberately do NOT install the
 # Packagist auto-update webhook; instead this workflow runs the full test
-# matrix + a version check, pauses at the `packagist-release` Environment for
-# manual approval, and only then notifies Packagist. The tag push is the
-# trigger; the Approve button is the publish.
+# matrix + the version checks (the VERSION constant, the pinned API
+# contract), pauses at the `packagist-release` Environment for manual
+# approval, and only then notifies Packagist. The tag push is the trigger;
+# the Approve button is the publish.
 #
 # The publish job needs BOTH the full matrix (test.yml, the same one CI runs)
-# and the version check, so the approval is never offered while anything is
+# and the version checks, so the approval is never offered while anything is
 # failing.
 on:
   push:
@@ -61,6 +62,13 @@ jobs:
           fi
           echo "Tag matches Version::VERSION: $code"
 
+      # The SDK shares its major.minor with the Poli Page API: a release X.Y.z
+      # must pass the API contract X.Y. The script reads the contract commit
+      # test.yml pins and requires a stable contract tag vX.Y.Z on it with the
+      # tag's major.minor.
+      - name: Pinned API contract matches the tag's major.minor
+        run: ./scripts/check-contract-version.sh "${GITHUB_REF_NAME}"
+
   publish:
     name: Publish to Packagist
     needs: [test, validate-version]
@@ -69,7 +77,7 @@ jobs:
     # in repo Settings → Environments with required reviewers. The job will not
     # start until a reviewer approves, so nothing reaches Packagist before then.
     # Because it `needs` both jobs above, the approval is never offered unless
-    # the full matrix and the version check are green.
+    # the full matrix and the version checks are green.
     environment: packagist-release
     permissions:
       contents: write # create the GitHub Release

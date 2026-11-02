@@ -5,6 +5,15 @@ description: Upgrade guides for the breaking releases of the PHP SDK.
 
 This page tracks breaking changes between versions of `poli-page/sdk`. For the full per-release diff, see the [changelog](../changelog/).
 
+## From 0.11.0 to 0.13.0
+
+The SDK now shares its major.minor with the Poli Page API, so there is no 0.12. This release follows the [Poli Page API contract](https://github.com/poli-page/api-contract) v0.13.0. The full guide is in [`MIGRATION.md` in the repo](https://github.com/poli-page/sdk-php/blob/main/MIGRATION.md).
+
+- A 2xx whose body is not JSON raises `InvalidResponseException` (`invalid_response`, the real 2xx as `status`, never retried) instead of `INTERNAL_ERROR`. `toPayload()` answers 502 for it.
+- `renderToFile()` raises `io_error` (`Failed to write PDF: <reason>`) instead of `invalid_options` when it cannot write the file, and leaves the target untouched on any failure.
+- The presigned-URL download is bounded by the client's `timeout` when the call sets none: the whole download for `render->pdf()` and `downloadPdf()`, an idle timeout for `render->pdfStream()`. Past it, `DOWNLOAD_FAILED` says `Failed to download PDF: timeout`.
+- With Guzzle, the download of `render->pdfStream()` and `renderToFile()` goes through Guzzle's stream handler instead of cURL: cURL options on your Guzzle client do not apply to it, and it needs `allow_url_fopen`.
+
 ## From 0.10.0 to 0.11.0
 
 The SDK now follows the retry policy and the error messages of the [Poli Page API contract](https://github.com/poli-page/api-contract). The full guide is in [`MIGRATION.md` in the repo](https://github.com/poli-page/sdk-php/blob/main/MIGRATION.md).

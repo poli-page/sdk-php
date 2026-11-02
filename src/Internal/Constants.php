@@ -32,14 +32,19 @@ final class Constants
      */
     public const NON_RETRYABLE_CODES = ['QUOTA_EXCEEDED', 'OVERAGE_CAP_EXCEEDED', 'STORAGE_ACCESS_DENIED'];
 
-    // SDK-side error messages (SDK spec §8.3): exact texts, the same in every
-    // Poli Page SDK. `{timeoutMs}` is the attempt's timeout in milliseconds,
-    // `{status}` the storage status of a failed download.
+    // SDK-side error messages: exact texts, the same in every Poli Page SDK
+    // and checked by the API contract. `{timeoutMs}` is the attempt's timeout
+    // in milliseconds, `{status}` the storage status of a failed download or
+    // the API status of a non-JSON 2xx, `{reason}` the OS or runtime error's
+    // own text.
     public const MESSAGE_INVALID_OPTIONS = 'apiKey is required';
     public const MESSAGE_NETWORK_ERROR = 'Network request failed';
     public const MESSAGE_TIMEOUT = 'Request timed out after {timeoutMs}ms';
     public const MESSAGE_DOWNLOAD_FAILED = 'Failed to download PDF: HTTP {status}';
     public const MESSAGE_DOWNLOAD_FAILED_NETWORK = 'Failed to download PDF: network error';
+    public const MESSAGE_DOWNLOAD_FAILED_TIMEOUT = 'Failed to download PDF: timeout';
+    public const MESSAGE_INVALID_RESPONSE = 'Invalid response: HTTP {status} body is not JSON';
+    public const MESSAGE_IO_ERROR = 'Failed to write PDF: {reason}';
     public const MESSAGE_PROJECT_REQUIRED = 'project is required';
 
     public const USER_AGENT_PREFIX = 'poli-page-sdk-php/';

@@ -3,7 +3,8 @@
 #
 # What this script does:
 #   1. Pre-flight checks (clean working tree, on `main`, branch up-to-date,
-#      tag doesn't already exist, VERSION constant matches the requested tag).
+#      tag doesn't already exist, VERSION constant matches the requested tag,
+#      the pinned API contract has the release's major.minor).
 #   2. Runs the full CI gate locally: composer validate, lint, phpstan,
 #      composer audit, the phpunit unit suite and the API contract suite
 #      against the contract version CI pins.
@@ -115,6 +116,11 @@ if ! grep -q "## \\[$target_version\\]" CHANGELOG.md; then
     fail "no [$target_version] entry in CHANGELOG.md"
 fi
 ok "CHANGELOG.md has a [$target_version] entry"
+
+# The SDK shares its major.minor with the Poli Page API: the pinned API
+# contract must carry a stable tag of the release's major.minor.
+contract_check="$(./scripts/check-contract-version.sh "$target_version" 2>&1)" || fail "$contract_check"
+ok "$contract_check"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CI gate
