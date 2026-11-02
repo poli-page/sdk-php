@@ -21,6 +21,8 @@ use Psr\Http\Message\StreamInterface;
 #[CoversClass(DownloadStream::class)]
 final class DownloadStreamTest extends TestCase
 {
+    private const BODY = '%PDF-1.7 a complete body';
+
     public function testAnEmptyReadFlaggedTimedOutIsATimeout(): void
     {
         $stream = new DownloadStream(self::socketLike(read: '', timedOut: true));
@@ -91,6 +93,70 @@ final class DownloadStreamTest extends TestCase
 
         self::assertSame('%PDF-1.7', $stream->getContents());
         self::assertTrue($stream->eof());
+    }
+
+    public function testAPartialReadThenACastOfANonSeekableBodyPasses(): void
+    {
+        $inner = FnStream::decorate(Utils::streamFor(self::BODY), ['isSeekable' => static fn (): bool => false]);
+        $stream = new DownloadStream($inner, \strlen(self::BODY));
+
+        self::assertSame('%PDF-', $stream->read(5));
+        self::assertSame(substr(self::BODY, 5), (string) $stream);
+        self::assertTrue($stream->eof());
+    }
+
+    public function testAPartialReadThenACastOfASeekableBodyPasses(): void
+    {
+        $stream = new DownloadStream(Utils::streamFor(self::BODY), \strlen(self::BODY));
+
+        self::assertSame('%PDF-', $stream->read(5));
+        self::assertSame(self::BODY, (string) $stream);
+        self::assertTrue($stream->eof());
+    }
+
+    public function testASeekForwardThenGetContentsPasses(): void
+    {
+        $stream = new DownloadStream(Utils::streamFor(self::BODY), \strlen(self::BODY));
+
+        $stream->seek(5);
+
+        self::assertSame(substr(self::BODY, 5), $stream->getContents());
+        self::assertTrue($stream->eof());
+    }
+
+    public function testARewindAfterAPartialReadPasses(): void
+    {
+        $stream = new DownloadStream(Utils::streamFor(self::BODY), \strlen(self::BODY));
+
+        $stream->read(5);
+        $stream->rewind();
+
+        self::assertSame(self::BODY, $stream->getContents());
+        self::assertTrue($stream->eof());
+    }
+
+    public function testEofStaysFalseOnAShortBodyAndTheNextReadRaises(): void
+    {
+        $inner = Utils::streamFor('%PDF-1.7 short');
+        $inner->getContents();
+        $stream = new DownloadStream($inner, 1000);
+
+        self::assertFalse($stream->eof(), 'a short body is never reported complete');
+        $this->assertNetworkFailure(static fn (): string => $stream->read(8192));
+    }
+
+    /**
+     * @param \Closure(): string $read
+     */
+    private function assertNetworkFailure(\Closure $read): void
+    {
+        try {
+            $read();
+            self::fail('Expected DOWNLOAD_FAILED');
+        } catch (PoliPageException $e) {
+            self::assertSame(PoliPageException::DOWNLOAD_FAILED, $e->errorCode);
+            self::assertSame('Failed to download PDF: network error', $e->getMessage());
+        }
     }
 
     /**

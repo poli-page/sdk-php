@@ -37,6 +37,8 @@ The client's `timeout` bounds the wait for the first byte and each gap between t
 
 With Guzzle, this download goes through Guzzle's stream handler (PHP's HTTP stream wrapper) rather than cURL: cURL options set on your Guzzle client do not apply to it, and it needs PHP's `allow_url_fopen`. `render->pdf()` and `downloadPdf()` still use cURL.
 
+Read the PSR-7 stream directly (or use `renderToFile()`): a PHP stream resource made from it with `GuzzleHttp\Psr7\StreamWrapper` (guzzlehttp/psr7 3.x) cannot report a failed download, and a copy from it can come out short without an error.
+
 ## Write to file (`renderToFile`)
 
 The `renderToFile()` free function (autoloaded from `src/render_to_file.php`) streams bytes directly to disk with bounded memory. Parent directories are created automatically.

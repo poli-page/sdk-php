@@ -20,13 +20,21 @@ use Psr\Http\Message\StreamInterface;
  * A body that ends before its announced `Content-Length` is DOWNLOAD_FAILED
  * with the network message, whatever the HTTP library does: Guzzle 7's
  * stream handler, for one, reports a connection closed mid-body as a plain
- * end of stream, which would otherwise pass for a complete, shorter PDF.
+ * end of stream, which would otherwise pass for a complete, shorter PDF. The
+ * check follows the position reached in the body (reads, `seek()`,
+ * `rewind()`), not the bytes returned, so re-reading or skipping part of a
+ * complete body never fails it.
+ *
+ * Not covered: a chunked or content-encoded answer has no length to check, so
+ * a connection closed mid-body still ends that stream silently under Guzzle
+ * 7's stream handler (Guzzle 8, Symfony HttpClient and cURL detect it
+ * themselves). The PDF storage always answers with a `Content-Length`.
  *
  * @internal
  */
 final class DownloadStream implements StreamInterface
 {
-    /** The bytes returned so far. */
+    /** The position reached in the body: the bytes read from its start. */
     private int $received = 0;
 
     /**
@@ -91,9 +99,8 @@ final class DownloadStream implements StreamInterface
         return $this->reading(function (): string {
             if ($this->stream->isSeekable()) {
                 $this->stream->rewind();
+                $this->received = 0;
             }
-
-            $this->received = 0;
 
             return $this->stream->getContents();
         }, toTheEnd: true);
@@ -110,16 +117,14 @@ final class DownloadStream implements StreamInterface
     }
 
     /**
-     * @throws PoliPageException DOWNLOAD_FAILED when the body ended short of its announced length
+     * Never true for a body that ended short of its announced length: the
+     * caller's next read raises DOWNLOAD_FAILED instead, so a
+     * `while (!eof()) read()` loop never takes a short body for a whole one.
      */
     public function eof(): bool
     {
-        $eof = $this->stream->eof();
-        if ($eof) {
-            self::assertComplete($this->received, $this->expectedLength);
-        }
-
-        return $eof;
+        return $this->stream->eof()
+            && ($this->expectedLength === null || $this->received >= $this->expectedLength);
     }
 
     public function close(): void
@@ -150,11 +155,13 @@ final class DownloadStream implements StreamInterface
     public function seek(int $offset, int $whence = SEEK_SET): void
     {
         $this->stream->seek($offset, $whence);
+        $this->received = $this->stream->tell();
     }
 
     public function rewind(): void
     {
         $this->stream->rewind();
+        $this->received = 0;
     }
 
     public function isWritable(): bool

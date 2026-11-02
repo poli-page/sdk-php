@@ -69,7 +69,11 @@ to 0.13. See [MIGRATION.md](MIGRATION.md#from-0110-to-0130).
 - A download whose connection closes before the announced `Content-Length`
   raises `DOWNLOAD_FAILED` (`Failed to download PDF: network error`) with
   every HTTP client, and `renderToFile()` then leaves the target untouched.
-- A `timeout` of 0 or less sets no bound, also for the download.
+- With a `timeout` of 0 or less, the SDK sets no timeout, for API calls and
+  downloads alike, and your HTTP client's own default applies: none for
+  Guzzle over cURL, PHP's `default_socket_timeout` (60 s by default) for
+  Symfony HTTP Client and for Guzzle 7's streamed download. Before, 0 timed
+  out at once with Symfony, and a negative value failed with Guzzle.
 
 ## [0.11.0] - 2026-10-30
 

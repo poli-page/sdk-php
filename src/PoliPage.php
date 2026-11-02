@@ -240,7 +240,7 @@ final class PoliPage implements Transport
             // stream handler, reports a timeout before the answer only as
             // "HTTP request failed!". A failure once a positive timeout has
             // elapsed is that timeout; 1 ms covers timers that round it down.
-            // A timeout of 0 or less sets no bound, so it never applies.
+            // With a timeout of 0 or less the SDK sets none, so it never applies.
             $elapsed = (hrtime(true) - $startedAt) / 1e9;
             throw DownloadStream::failure($e, timedOut: $timeout > 0 && $elapsed >= $timeout - 0.001);
         }

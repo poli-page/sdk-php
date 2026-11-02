@@ -43,7 +43,10 @@ use Psr\Http\Message\ResponseInterface;
  * whole-download bound is per read rather than a total on Guzzle 7, whose
  * stream handler has no total timeout.
  *
- * A timeout of 0 or less sets no bound.
+ * A timeout of 0 or less: the SDK sets no timeout and the client's own
+ * default applies (none for Guzzle over cURL, nor for Guzzle 8's stream
+ * handler; PHP's `default_socket_timeout` for Symfony and for Guzzle 7's
+ * stream handler).
  *
  *  - **Other PSR-18 clients** — the timeout cannot be applied per request
  *    through the PSR-18 contract: configure it on the client you inject.
@@ -93,7 +96,7 @@ final class TimeoutPolicy
         bool $idle = false,
     ): ResponseInterface {
         $freshConnection = $request->getMethod() === 'POST' && \defined('CURLOPT_FRESH_CONNECT');
-        // A timeout of 0 or less sets no bound: Guzzle reads 0 so, and
+        // A timeout of 0 or less: no SDK timeout. Guzzle reads 0 as none, and
         // Symfony gets no timeout option at all (it would read 0 as an
         // immediate timeout).
         if ($timeoutSeconds !== null && $timeoutSeconds <= 0) {

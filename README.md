@@ -135,7 +135,7 @@ fclose($file);
 $stream->close();
 ```
 
-Any PSR-7-aware destination works — write to a file, an HTTP response body, or an S3 multipart upload that accepts a stream.
+Any PSR-7-aware destination works — write to a file, an HTTP response body, or an S3 multipart upload that accepts a stream. Read the PSR-7 stream itself: a PHP stream resource made from it with guzzlehttp/psr7 3.x's `StreamWrapper` cannot report a failed download, so a copy from it can come out short without an error.
 
 ## Working with stored documents
 
@@ -329,7 +329,7 @@ PHP has no first-class cancellation primitive (no `AbortSignal`, no `context.Con
 
 The same value bounds the presigned-URL download: the whole download for `render->pdf()` and `downloadPdf()`, and, for `render->pdfStream()`, the wait for the first byte and each gap between two chunks. Past it, the error is `DOWNLOAD_FAILED` with the message `Failed to download PDF: timeout`.
 
-PSR-18 does not standardise per-request timeouts, so the SDK applies the value through the client's own per-request options: Guzzle's request options, and Symfony HTTP Client's `withOptions()` (`max_duration` and the idle `timeout`, or the idle `timeout` alone for `render->pdfStream()`; symfony/http-client 6.2 or later). With Guzzle, `render->pdfStream()` and `renderToFile()` download through Guzzle's stream handler, so cURL options set on your Guzzle client do not apply to that download and it needs `allow_url_fopen`. A timeout of 0 sets no bound. With any other PSR-18 client the value cannot reach the client: configure the timeout on the client you inject.
+PSR-18 does not standardise per-request timeouts, so the SDK applies the value through the client's own per-request options: Guzzle's request options, and Symfony HTTP Client's `withOptions()` (`max_duration` and the idle `timeout`, or the idle `timeout` alone for `render->pdfStream()`; symfony/http-client 6.2 or later). With Guzzle, `render->pdfStream()` and `renderToFile()` download through Guzzle's stream handler, so cURL options set on your Guzzle client do not apply to that download and it needs `allow_url_fopen`. With a timeout of 0 or less the SDK sets no timeout and your HTTP client's own default applies: none for Guzzle over cURL, PHP's `default_socket_timeout` (60 s by default) for Symfony HTTP Client and for Guzzle 7's streamed download. With any other PSR-18 client the value cannot reach the client: configure the timeout on the client you inject.
 
 ## Observability
 
