@@ -92,6 +92,33 @@ final class TrickleServer
         return is_resource($pipe) ? $pipe : null;
     }
 
+    /**
+     * A 200 PDF answer that announces `$announcedLength` bytes, sends
+     * `$body` (fewer), then closes the connection.
+     *
+     * @return list<array{int, string}>
+     */
+    public static function truncatedPdf(int $announcedLength, string $body): array
+    {
+        return [[0, "HTTP/1.1 200 OK\r\ncontent-type: application/pdf\r\ncontent-length: {$announcedLength}"
+            . "\r\nconnection: close\r\n\r\n" . $body]];
+    }
+
+    /**
+     * An origin where nothing listens: a connection to it is refused.
+     */
+    public static function refusedOrigin(): string
+    {
+        $listener = stream_socket_server('tcp://127.0.0.1:0');
+        $name = $listener === false ? false : stream_socket_get_name($listener, false);
+        if ($listener === false || $name === false) {
+            throw new \RuntimeException('Cannot reserve a local port');
+        }
+        fclose($listener);
+
+        return 'http://' . $name;
+    }
+
     public function stop(): void
     {
         $status = proc_get_status($this->process);

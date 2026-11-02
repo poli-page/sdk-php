@@ -57,9 +57,19 @@ to 0.13. See [MIGRATION.md](MIGRATION.md#from-0110-to-0130).
 - A download that outlasts its timeout raises `DOWNLOAD_FAILED` with the
   message `Failed to download PDF: timeout` (was
   `Failed to download PDF: network error`). No status, not retryable.
-- With Guzzle, `render->pdfStream()` now streams the PDF through Guzzle's
-  stream handler (part of its default handler stack) instead of buffering it
-  before returning.
+- With Guzzle, the download of `render->pdfStream()` and `renderToFile()` now
+  goes through Guzzle's stream handler (PHP's HTTP stream wrapper, part of
+  Guzzle's default handler stack) instead of cURL, so the PDF streams instead
+  of being buffered and the idle timeout applies. Two consequences: cURL
+  options set on your Guzzle client (`curl` config: CA bundle, `CURLOPT_RESOLVE`,
+  client certificates, interface binding) do not apply to that download, and
+  it needs PHP's `allow_url_fopen`. Without `allow_url_fopen`, Guzzle keeps
+  cURL, buffers the PDF, and the timeout bounds the whole download.
+  `render->pdf()` and `downloadPdf()` still use cURL.
+- A download whose connection closes before the announced `Content-Length`
+  raises `DOWNLOAD_FAILED` (`Failed to download PDF: network error`) with
+  every HTTP client, and `renderToFile()` then leaves the target untouched.
+- A `timeout` of 0 or less sets no bound, also for the download.
 
 ## [0.11.0] - 2026-10-30
 
@@ -351,7 +361,8 @@ breaking changes may still land before 1.0.0.
   macOS and Windows for 8.5. `composer validate --strict`,
   `composer audit`, lint, static analysis, and unit tests all gated.
 
-[Unreleased]: https://github.com/poli-page/sdk-php/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/poli-page/sdk-php/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/poli-page/sdk-php/compare/v0.11.0...v0.13.0
 [0.11.0]: https://github.com/poli-page/sdk-php/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/poli-page/sdk-php/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/poli-page/sdk-php/releases/tag/v0.9.0

@@ -191,6 +191,7 @@ final class PoliPage implements Transport
         } catch (\Exception $e) {
             throw DownloadStream::failure($e);
         }
+        DownloadStream::assertComplete(\strlen($body), DownloadStream::expectedLength($response));
         if ($body === '') {
             throw new PoliPageException(
                 'PDF download response had an empty body',
@@ -206,11 +207,9 @@ final class PoliPage implements Transport
     {
         $response = $this->sendUnauthenticatedGet($url, $timeout ?? $this->defaultTimeout, idle: true);
 
-        // No size sanity check: PSR-7 streams may report `getSize() === null`
-        // (chunked transfer, unknown content-length) and zero-length 2xx
-        // responses would surface as `eof()` immediately on the caller side
-        // anyway. A failure while the caller reads it is DOWNLOAD_FAILED.
-        return new DownloadStream($response->getBody());
+        // A failure while the caller reads it is DOWNLOAD_FAILED, and so is a
+        // body that ends short of its announced Content-Length.
+        return new DownloadStream($response->getBody(), DownloadStream::expectedLength($response));
     }
 
     /**
@@ -236,12 +235,14 @@ final class PoliPage implements Transport
         try {
             $response = TimeoutPolicy::send($this->httpClient, $request, $timeout, $idle);
         } catch (ClientExceptionInterface $e) {
-            // Why the clock: PHP's HTTP stream wrapper, under Guzzle's stream
-            // handler, reports a timeout before the answer only as "HTTP
-            // request failed!". A failure once the timeout has elapsed is that
-            // timeout; 1 ms covers timers that round the timeout down to it.
+            // The HTTP library's own report comes first (DownloadStream::failure).
+            // Why the clock as well: PHP's HTTP stream wrapper, under Guzzle's
+            // stream handler, reports a timeout before the answer only as
+            // "HTTP request failed!". A failure once a positive timeout has
+            // elapsed is that timeout; 1 ms covers timers that round it down.
+            // A timeout of 0 or less sets no bound, so it never applies.
             $elapsed = (hrtime(true) - $startedAt) / 1e9;
-            throw DownloadStream::failure($e, timedOut: $elapsed >= $timeout - 0.001);
+            throw DownloadStream::failure($e, timedOut: $timeout > 0 && $elapsed >= $timeout - 0.001);
         }
 
         $status = $response->getStatusCode();

@@ -58,6 +58,17 @@ and is never cut off for its total length. Past the timeout the error is
 `DOWNLOAD_FAILED` with the message `Failed to download PDF: timeout` (was
 `Failed to download PDF: network error`).
 
+### With Guzzle, `pdfStream()` and `renderToFile()` download through Guzzle's stream handler
+
+To stream the PDF and apply the idle timeout, the SDK asks Guzzle to stream
+that download, which Guzzle's default handler stack serves with its stream
+handler (PHP's HTTP stream wrapper) instead of cURL. cURL options set on your
+Guzzle client (a CA bundle, `CURLOPT_RESOLVE`, a client certificate) do not
+apply to it, and it needs PHP's `allow_url_fopen`. If you pin the storage
+host or authenticate to it through cURL options, use `render->pdf()` or
+`downloadPdf()`, which still go through cURL, or set the matching options
+in your environment (PHP's `openssl.cafile`, for one).
+
 ## From 0.10.0 to 0.11.0
 
 The SDK now follows the retry policy and the error messages of the Poli

@@ -36,7 +36,14 @@ use Psr\Http\Message\ResponseInterface;
  * `read_timeout` for each gap, which Guzzle 7's stream handler bounds with
  * `timeout` itself. A Guzzle handler stack without the stream handler (PHP's
  * `allow_url_fopen` off, say) buffers the whole body before `send()`
- * returns, and `timeout` then bounds that whole download.
+ * returns, and `timeout` then bounds that whole download. Through the
+ * stream handler, cURL options of the client do not apply.
+ *
+ * With a Guzzle stack that has the stream handler only (no cURL), the
+ * whole-download bound is per read rather than a total on Guzzle 7, whose
+ * stream handler has no total timeout.
+ *
+ * A timeout of 0 or less sets no bound.
  *
  *  - **Other PSR-18 clients** — the timeout cannot be applied per request
  *    through the PSR-18 contract: configure it on the client you inject.
@@ -86,15 +93,18 @@ final class TimeoutPolicy
         bool $idle = false,
     ): ResponseInterface {
         $freshConnection = $request->getMethod() === 'POST' && \defined('CURLOPT_FRESH_CONNECT');
+        // A timeout of 0 or less sets no bound: Guzzle reads 0 so, and
+        // Symfony gets no timeout option at all (it would read 0 as an
+        // immediate timeout).
+        if ($timeoutSeconds !== null && $timeoutSeconds <= 0) {
+            $timeoutSeconds = null;
+        }
 
-        if ($timeoutSeconds !== null
-            && class_exists(\GuzzleHttp\Client::class)
-            && $client instanceof \GuzzleHttp\Client
-        ) {
+        if (class_exists(\GuzzleHttp\Client::class) && $client instanceof \GuzzleHttp\Client) {
             // Guzzle's native send() accepts per-request options. The PSR-18
             // path (sendRequest) ignores them, so use send() directly here.
             $options = [
-                \GuzzleHttp\RequestOptions::TIMEOUT => $timeoutSeconds,
+                \GuzzleHttp\RequestOptions::TIMEOUT => $timeoutSeconds ?? 0,
                 \GuzzleHttp\RequestOptions::HTTP_ERRORS => false,
                 \GuzzleHttp\RequestOptions::ALLOW_REDIRECTS => false,
             ];
@@ -105,7 +115,7 @@ final class TimeoutPolicy
                 // `timeout` there is the socket's own timeout, which bounds
                 // each read already.
                 if (self::guzzleMajorVersion() >= 8) {
-                    $options[\GuzzleHttp\RequestOptions::READ_TIMEOUT] = $timeoutSeconds;
+                    $options[\GuzzleHttp\RequestOptions::READ_TIMEOUT] = $timeoutSeconds ?? 0;
                 }
             }
             if ($freshConnection) {

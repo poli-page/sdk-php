@@ -90,7 +90,7 @@ renderToFile(
 );
 ```
 
-`renderToFile` streams response bytes directly to disk in 8 KB chunks (bounded memory regardless of document size). It writes a temporary file next to the target and renames it into place only once the PDF is complete, so a failure leaves the target untouched; a file it cannot write raises `io_error` (`Failed to write PDF: <reason>`).
+`renderToFile` streams response bytes directly to disk in 8 KB chunks (bounded memory regardless of document size). It writes a temporary file next to the target and renames it into place only once the PDF is complete, so a failure leaves the target untouched; a file it cannot write raises `io_error` (`Failed to write PDF: <reason>`). The rename replaces the target file: an existing file's permissions, owner and hard links are not kept, and a symlink at the path is replaced, not followed. A process killed mid-download can leave a `.<name>.<random>.part` file next to the target.
 
 ### Try it locally — runnable demo
 
@@ -329,7 +329,7 @@ PHP has no first-class cancellation primitive (no `AbortSignal`, no `context.Con
 
 The same value bounds the presigned-URL download: the whole download for `render->pdf()` and `downloadPdf()`, and, for `render->pdfStream()`, the wait for the first byte and each gap between two chunks. Past it, the error is `DOWNLOAD_FAILED` with the message `Failed to download PDF: timeout`.
 
-PSR-18 does not standardise per-request timeouts, so the SDK applies the value through the client's own per-request options: Guzzle's request options, and Symfony HTTP Client's `withOptions()` (`max_duration` and the idle `timeout`; symfony/http-client 6.2 or later). With any other PSR-18 client the value cannot reach the client: configure the timeout on the client you inject.
+PSR-18 does not standardise per-request timeouts, so the SDK applies the value through the client's own per-request options: Guzzle's request options, and Symfony HTTP Client's `withOptions()` (`max_duration` and the idle `timeout`, or the idle `timeout` alone for `render->pdfStream()`; symfony/http-client 6.2 or later). With Guzzle, `render->pdfStream()` and `renderToFile()` download through Guzzle's stream handler, so cURL options set on your Guzzle client do not apply to that download and it needs `allow_url_fopen`. A timeout of 0 sets no bound. With any other PSR-18 client the value cannot reach the client: configure the timeout on the client you inject.
 
 ## Observability
 

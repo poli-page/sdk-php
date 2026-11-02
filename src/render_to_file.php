@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace PoliPage;
 
 use PoliPage\Internal\AtomicFileWriter;
+use PoliPage\Internal\Http\DownloadStream;
 
 /**
  * Render a PDF and stream the bytes to `$path`. Creates parent directories
@@ -57,6 +58,11 @@ function renderToFile(PoliPage $client, RenderInput $input, string $path): void
                 break;
             }
             $file->write($chunk);
+        }
+        // An empty read short of the end is a download that stopped: never
+        // commit what came before it.
+        if (!$stream->eof()) {
+            throw DownloadStream::failure(new \RuntimeException('The PDF download stopped before its end'));
         }
         $file->commit();
     } finally {

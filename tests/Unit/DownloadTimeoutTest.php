@@ -150,6 +150,27 @@ final class DownloadTimeoutTest extends TestCase
     }
 
     /**
+     * A timeout of 0 sets no bound: a failure is never labelled `timeout`
+     * by the clock, it keeps its own reason.
+     */
+    #[DataProvider('httpClients')]
+    public function testZeroTimeoutKeepsTheRealReasonOfAFailedDownload(string $httpClient): void
+    {
+        $client = new PoliPage(apiKey: 'pp_sandbox_x', timeout: 0.0, httpClient: self::httpClient($httpClient));
+        $descriptor = DocumentDescriptor::fromWire(
+            DocumentWire::descriptor(['presignedPdfUrl' => TrickleServer::refusedOrigin() . '/doc.pdf']),
+            $client,
+        );
+
+        foreach ([fn () => $descriptor->downloadPdf(), fn () => $client->streamBytes($descriptor->presignedPdfUrl, null)] as $call) {
+            $error = self::downloadFailure($call);
+            self::assertSame(PoliPageException::DOWNLOAD_FAILED, $error->errorCode);
+            self::assertSame('Failed to download PDF: network error', $error->getMessage());
+            self::assertNull($error->status);
+        }
+    }
+
+    /**
      * A client at a server that answers the render, then the download with
      * `$download`.
      *

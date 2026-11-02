@@ -6,6 +6,7 @@ namespace PoliPage\Internal\Http;
 
 use PoliPage\Internal\Constants;
 use PoliPage\PoliPageException;
+use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamInterface;
 
 /**
@@ -16,12 +17,55 @@ use Psr\Http\Message\StreamInterface;
  * download's idle timeout elapsed, the message is the timeout one: also when
  * the PSR-7 stream only reports it through its `timed_out` metadata.
  *
+ * A body that ends before its announced `Content-Length` is DOWNLOAD_FAILED
+ * with the network message, whatever the HTTP library does: Guzzle 7's
+ * stream handler, for one, reports a connection closed mid-body as a plain
+ * end of stream, which would otherwise pass for a complete, shorter PDF.
+ *
  * @internal
  */
 final class DownloadStream implements StreamInterface
 {
-    public function __construct(private readonly StreamInterface $stream)
+    /** The bytes returned so far. */
+    private int $received = 0;
+
+    /**
+     * @param int|null $expectedLength the answer's `Content-Length`, when it gives the body's
+     *                                 length ({@see self::expectedLength()})
+     */
+    public function __construct(private readonly StreamInterface $stream, private readonly ?int $expectedLength = null)
     {
+    }
+
+    /**
+     * The body length a response announces: its `Content-Length`, unless
+     * the body is encoded (the HTTP library may decode it to another
+     * length) or the header is not a single non-negative integer.
+     */
+    public static function expectedLength(ResponseInterface $response): ?int
+    {
+        $encoding = strtolower(trim($response->getHeaderLine('content-encoding')));
+        if ($encoding !== '' && $encoding !== 'identity') {
+            return null;
+        }
+        $length = trim($response->getHeaderLine('content-length'));
+
+        return preg_match('/^\d{1,18}\z/', $length) === 1 ? (int) $length : null;
+    }
+
+    /**
+     * DOWNLOAD_FAILED when `$received` bytes are fewer than `$expectedLength`
+     * at the end of the body.
+     */
+    public static function assertComplete(int $received, ?int $expectedLength): void
+    {
+        if ($expectedLength !== null && $received < $expectedLength) {
+            throw self::failure(new \RuntimeException(sprintf(
+                'The PDF download ended after %d of its %d bytes',
+                $received,
+                $expectedLength,
+            )));
+        }
     }
 
     /**
@@ -49,6 +93,8 @@ final class DownloadStream implements StreamInterface
                 $this->stream->rewind();
             }
 
+            $this->received = 0;
+
             return $this->stream->getContents();
         }, toTheEnd: true);
     }
@@ -63,9 +109,17 @@ final class DownloadStream implements StreamInterface
         return $this->reading(fn (): string => $this->stream->getContents(), toTheEnd: true);
     }
 
+    /**
+     * @throws PoliPageException DOWNLOAD_FAILED when the body ended short of its announced length
+     */
     public function eof(): bool
     {
-        return $this->stream->eof();
+        $eof = $this->stream->eof();
+        if ($eof) {
+            self::assertComplete($this->received, $this->expectedLength);
+        }
+
+        return $eof;
     }
 
     public function close(): void
@@ -144,6 +198,10 @@ final class DownloadStream implements StreamInterface
         }
         if (($toTheEnd || $bytes === '') && !$this->stream->eof() && $this->timedOut()) {
             throw self::failure(new \RuntimeException('Reading the PDF download timed out'), true);
+        }
+        $this->received += \strlen($bytes);
+        if ($this->stream->eof()) {
+            self::assertComplete($this->received, $this->expectedLength);
         }
 
         return $bytes;

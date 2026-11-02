@@ -37,7 +37,7 @@ tags="$(git ls-remote --tags "$REMOTE")" || fail "cannot list the tags of $REMOT
 # it points at. A lightweight tag is listed once, with its commit.
 stable_tags="$(
     awk -v sha="$contract_sha" '$1 == sha { ref = $2; sub(/^refs\/tags\//, "", ref); sub(/\^\{\}$/, "", ref); print ref }' <<<"$tags" \
-        | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -u || true
+        | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -u -V || true
 )"
 short_sha="${contract_sha:0:8}"
 if [ -z "$stable_tags" ]; then
@@ -52,5 +52,6 @@ while IFS= read -r tag; do
 done <<<"$stable_tags"
 
 pinned="$(tr '\n' ' ' <<<"$stable_tags" | sed 's/ $//')"
-[[ "$stable_tags" =~ ^v([0-9]+)\.([0-9]+)\. ]]
+# The newest of the commit's tags, which may carry two (an unchanged contract).
+[[ "$(tail -n 1 <<<"$stable_tags")" =~ ^v([0-9]+)\.([0-9]+)\. ]]
 fail "release v$version and the pinned API contract $pinned ($short_sha) differ in major.minor: pin the contract v$release_minor.x, or release v${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.x"

@@ -68,6 +68,31 @@ final class DownloadStreamTest extends TestCase
         }
     }
 
+    public function testABodyThatEndsShortOfItsLengthIsANetworkError(): void
+    {
+        $inner = FnStream::decorate(Utils::streamFor('%PDF-1.7 short'), []);
+        $stream = new DownloadStream($inner, 1000);
+
+        try {
+            while (!$stream->eof()) {
+                $stream->read(8192);
+            }
+            self::fail('Expected DOWNLOAD_FAILED');
+        } catch (PoliPageException $e) {
+            self::assertSame(PoliPageException::DOWNLOAD_FAILED, $e->errorCode);
+            self::assertSame('Failed to download PDF: network error', $e->getMessage());
+            self::assertNull($e->status);
+        }
+    }
+
+    public function testABodyOfItsAnnouncedLengthPasses(): void
+    {
+        $stream = new DownloadStream(Utils::streamFor('%PDF-1.7'), 8);
+
+        self::assertSame('%PDF-1.7', $stream->getContents());
+        self::assertTrue($stream->eof());
+    }
+
     /**
      * @param \Closure(): string $read
      */

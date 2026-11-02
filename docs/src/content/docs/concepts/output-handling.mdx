@@ -33,13 +33,15 @@ $stream = $client->render->pdfStream(new RenderInput(
 // $stream: Psr\Http\Message\StreamInterface — read in chunks, pipe to a response.
 ```
 
-The client's `timeout` bounds the wait for the first byte and each gap between two chunks, not the whole stream, so a large PDF read at your own pace is not cut off. A stall past it raises `DOWNLOAD_FAILED` (`Failed to download PDF: timeout`), from `pdfStream()` itself or from the read.
+The client's `timeout` bounds the wait for the first byte and each gap between two chunks, not the whole stream, so a large PDF read at your own pace is not cut off. A stall past it raises `DOWNLOAD_FAILED` (`Failed to download PDF: timeout`), from `pdfStream()` itself or from the read. A body that ends before its announced length raises `DOWNLOAD_FAILED` (`Failed to download PDF: network error`).
+
+With Guzzle, this download goes through Guzzle's stream handler (PHP's HTTP stream wrapper) rather than cURL: cURL options set on your Guzzle client do not apply to it, and it needs PHP's `allow_url_fopen`. `render->pdf()` and `downloadPdf()` still use cURL.
 
 ## Write to file (`renderToFile`)
 
 The `renderToFile()` free function (autoloaded from `src/render_to_file.php`) streams bytes directly to disk with bounded memory. Parent directories are created automatically.
 
-The bytes go to a temporary file next to the target, renamed into place only once the PDF is complete: if the render, the download or the write fails, the target is left as it was. A file that cannot be written raises `io_error` with the message `Failed to write PDF: <reason>` (PHP's own error text, also chained as `getPrevious()`); it has no status and is never retried.
+The bytes go to a temporary file next to the target, renamed into place only once the PDF is complete: if the render, the download or the write fails, the target is left as it was. A file that cannot be written raises `io_error` with the message `Failed to write PDF: <reason>` (PHP's own error text, also chained as `getPrevious()`); it has no status and is never retried. The rename replaces the target file, so an existing file's permissions, owner and hard links are not kept, and a symlink at the path is replaced rather than followed. A process killed mid-download can leave a `.<name>.<random>.part` file next to the target.
 
 ```php
 use function PoliPage\renderToFile;
