@@ -69,9 +69,11 @@ order called out by the cross-SDK porter checklist; see
 
 ## Releasing
 
+How versions are numbered is in [RELEASING.md](RELEASING.md).
+
 Releases are **manual** and gated by `scripts/release.sh`. Pushing the tag
 starts the `Release` workflow (`.github/workflows/release.yml`), which
-re-runs the test matrix and a version check, then waits for a reviewer to
+re-runs the test matrix and the version checks, then waits for a reviewer to
 approve the `packagist-release` Environment before it pings Packagist
 and creates the GitHub Release. There is no Packagist webhook. The script runs every CI gate locally, prompts
 for confirmation, and creates a local annotated tag; pushing the tag
