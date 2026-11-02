@@ -122,7 +122,7 @@ function renderErrorCodes(): array
         'PROJECT_NOT_FOUND', 'PROJECT_NOT_IN_ENVIRONMENT', 'TEMPLATE_NOT_FOUND',
         'TEMPLATE_ERROR', 'TEMPLATE_UNSAFE', 'EMPTY_DOCUMENT', 'DOCUMENT_TOO_LARGE', 'RENDER_TIMEOUT',
         'QUOTA_EXCEEDED', 'OVERAGE_CAP_EXCEEDED', 'PUBLISH_IN_PROGRESS',
-        ...serverErrorCodes(),
+        ...serverErrorCodes(), 'invalid_response',
     ];
 }
 
@@ -180,6 +180,7 @@ function methodTargets(): array
             'example' => 'documents-get.php',
             'errorCodes' => [
                 ...authErrorCodes(), 'DOCUMENT_NOT_FOUND', 'FORBIDDEN', 'DOCUMENT_GONE', ...serverErrorCodes(),
+                'invalid_response',
             ],
         ],
         [
@@ -202,6 +203,7 @@ function methodTargets(): array
                 'invalid_options', ...authErrorCodes(), ...writeGateErrorCodes(),
                 'DOCUMENT_NOT_FOUND', 'FORBIDDEN', 'DOCUMENT_GONE', 'THUMBNAILS_NOT_AVAILABLE',
                 'VALIDATION_ERROR', 'QUOTA_EXCEEDED', 'OVERAGE_CAP_EXCEEDED', ...serverErrorCodes(),
+                'invalid_response',
             ],
         ],
         [
@@ -222,7 +224,7 @@ function methodTargets(): array
             'method' => null,
             'function' => 'PoliPage\\renderToFile',
             'example' => 'render-to-file.php',
-            'errorCodes' => renderPdfErrorCodes(),
+            'errorCodes' => [...renderPdfErrorCodes(), 'io_error'],
         ],
     ];
 }
@@ -424,7 +426,9 @@ function sdkInternalErrors(): array
         ['code' => 'timeout',         'when' => 'The request did not complete within `timeout` (`Request timed out after <ms>ms`). Retryable.'],
         ['code' => 'aborted',         'when' => 'Caller-driven cancellation. Not retryable.'],
         ['code' => 'unknown_error',   'when' => 'A catch-all for unexpected failures.'],
-        ['code' => 'DOWNLOAD_FAILED', 'when' => 'The presigned PDF download failed: `Failed to download PDF: HTTP <status>` with the storage `status`, or `Failed to download PDF: network error` without one (no answer, a timeout, or a connection dropped mid-body). Never retryable, whatever the storage status.'],
+        ['code' => 'DOWNLOAD_FAILED', 'when' => 'The presigned PDF download failed: `Failed to download PDF: HTTP <status>` with the storage `status`; `Failed to download PDF: timeout` without one when it outlasted `timeout` (the whole download, or for `render->pdfStream()` the wait for the first byte or a gap between two chunks); `Failed to download PDF: network error` without one otherwise (no answer, or a connection dropped mid-body). Never retryable, whatever the storage status.'],
+        ['code' => 'invalid_response', 'when' => 'A 2xx answer whose body is not JSON, from a method that expects JSON (`Invalid response: HTTP <status> body is not JSON`, the real 2xx as `status`). Raised as `InvalidResponseException`; `toPayload()` answers 502 for it. Not retryable.'],
+        ['code' => 'io_error',        'when' => '`renderToFile()` could not write the file (`Failed to write PDF: <reason>`, no status, PHP\'s error as `getPrevious()`); the target file is left untouched. Not retryable.'],
         ['code' => 'INTERNAL_ERROR',  'when' => 'The API answered 5xx, its error body was not JSON or could not be read (`HTTP <status>`, real status kept), or its response had an unexpected shape. Retryable on 5xx and 429.'],
     ];
 }
@@ -537,6 +541,7 @@ function buildErrorsPage(): string
         ['class' => 'PoliPage\\Exception\\InternalServerException','extends' => 'ApiStatusException',   'when' => 'HTTP 5xx.'],
         ['class' => 'PoliPage\\Exception\\ConnectionException',    'extends' => 'PoliPageException',    'when' => 'Transport-layer failure (no HTTP response).'],
         ['class' => 'PoliPage\\Exception\\TimeoutException',       'extends' => 'ConnectionException',  'when' => 'Per-request deadline exceeded.'],
+        ['class' => 'PoliPage\\Exception\\InvalidResponseException', 'extends' => 'PoliPageException', 'when' => 'A 2xx answer whose body is not JSON. `$status` is that 2xx.'],
     ];
 
     $j = static fn (array $rows): string => json_encode($rows, JSON_UNESCAPED_SLASHES);

@@ -217,9 +217,42 @@ final class ContractFile
 
     public function downloadNetworkMessage(): string
     {
-        $message = $this->sdkErrors()['DOWNLOAD_FAILED']['networkMessage'] ?? null;
+        return $this->downloadMessage('networkMessage');
+    }
+
+    public function downloadTimeoutMessage(): string
+    {
+        return $this->downloadMessage('timeoutMessage');
+    }
+
+    /**
+     * `policy.implStatusForSdkCode`: the status an integration answers with
+     * for an SDK code, the `status` of `toPayload()`.
+     *
+     * @return array<string, int>
+     */
+    public function implStatusForSdkCode(): array
+    {
+        $value = $this->policy['implStatusForSdkCode'] ?? null;
+        if (!is_array($value)) {
+            throw new ContractException('policy.implStatusForSdkCode is not an object');
+        }
+        $out = [];
+        foreach ($value as $code => $status) {
+            if (!is_int($status)) {
+                throw new ContractException(sprintf('policy.implStatusForSdkCode.%s is not an integer', $code));
+            }
+            $out[(string) $code] = $status;
+        }
+
+        return $out;
+    }
+
+    private function downloadMessage(string $field): string
+    {
+        $message = $this->sdkErrors()['DOWNLOAD_FAILED'][$field] ?? null;
         if (!is_string($message)) {
-            throw new ContractException('policy.sdkErrors.DOWNLOAD_FAILED has no networkMessage');
+            throw new ContractException('policy.sdkErrors.DOWNLOAD_FAILED has no ' . $field);
         }
 
         return $message;

@@ -9,6 +9,7 @@ use Http\Discovery\Psr18ClientDiscovery;
 use PoliPage\Events\RequestEvent;
 use PoliPage\Events\ResponseEvent;
 use PoliPage\Events\RetryEvent;
+use PoliPage\Exception\InvalidResponseException;
 use PoliPage\Internal\Constants;
 use PoliPage\Internal\ExceptionClassifier;
 use PoliPage\Internal\Http\Backoff;
@@ -184,7 +185,7 @@ final class PoliPage implements Transport
 
     public function fetchBytes(string $url, ?float $timeout): string
     {
-        $response = $this->sendUnauthenticatedGet($url, $timeout);
+        $response = $this->sendUnauthenticatedGet($url, $timeout ?? $this->defaultTimeout, idle: false);
         try {
             $body = BodyReader::read($response->getBody());
         } catch (\Exception $e) {
@@ -203,7 +204,7 @@ final class PoliPage implements Transport
 
     public function streamBytes(string $url, ?float $timeout): StreamInterface
     {
-        $response = $this->sendUnauthenticatedGet($url, $timeout);
+        $response = $this->sendUnauthenticatedGet($url, $timeout ?? $this->defaultTimeout, idle: true);
 
         // No size sanity check: PSR-7 streams may report `getSize() === null`
         // (chunked transfer, unknown content-length) and zero-length 2xx
@@ -216,20 +217,31 @@ final class PoliPage implements Transport
      * Single-shot, unauthenticated GET — used for the presigned S3 URLs
      * returned by /v1/render. The SDK's auth headers, retry policy, and
      * idempotency are deliberately bypassed because the URL is already
-     * signed and the storage endpoint does not honour any of them. The
-     * caller's `$timeout` is applied via {@see TimeoutPolicy::send}.
+     * signed and the storage endpoint does not honour any of them.
      *
-     * Every failure is DOWNLOAD_FAILED (SDK spec §7.2): with the storage
-     * status for a non-2xx answer, without one (and the HTTP library's error
-     * as `previous`) when no answer came, a timeout included.
+     * `$timeout` (the call's timeout, else the client's) is applied via
+     * {@see TimeoutPolicy::send}: as a bound on the whole download, or with
+     * `$idle` as an idle timeout (the wait for the first byte and each gap
+     * between two chunks), for a body the caller reads at its own pace.
+     *
+     * Every failure is DOWNLOAD_FAILED: with the storage status for a
+     * non-2xx answer, without one (and the HTTP library's error as
+     * `previous`) when no answer came, with the timeout message when the
+     * timeout elapsed.
      */
-    private function sendUnauthenticatedGet(string $url, ?float $timeout): ResponseInterface
+    private function sendUnauthenticatedGet(string $url, float $timeout, bool $idle): ResponseInterface
     {
         $request = $this->requestFactory->createRequest('GET', $url);
+        $startedAt = hrtime(true);
         try {
-            $response = TimeoutPolicy::send($this->httpClient, $request, $timeout);
+            $response = TimeoutPolicy::send($this->httpClient, $request, $timeout, $idle);
         } catch (ClientExceptionInterface $e) {
-            throw DownloadStream::failure($e);
+            // Why the clock: PHP's HTTP stream wrapper, under Guzzle's stream
+            // handler, reports a timeout before the answer only as "HTTP
+            // request failed!". A failure once the timeout has elapsed is that
+            // timeout; 1 ms covers timers that round the timeout down to it.
+            $elapsed = (hrtime(true) - $startedAt) / 1e9;
+            throw DownloadStream::failure($e, timedOut: $elapsed >= $timeout - 0.001);
         }
 
         $status = $response->getStatusCode();
@@ -245,6 +257,11 @@ final class PoliPage implements Transport
     }
 
     /**
+     * The JSON body of a 2xx API answer. A body that is not JSON (an HTML
+     * page from a proxy or a captive portal, say) is `invalid_response`,
+     * with the real 2xx status, the answer's request id and the JSON error
+     * as `previous`. It comes after the retry loop: it is never retried.
+     *
      * @return array<array-key, mixed>
      */
     private function decodeJsonBody(ResponseInterface $response): array
@@ -253,15 +270,22 @@ final class PoliPage implements Transport
         try {
             $decoded = json_decode($body, associative: true, flags: JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
-            throw new PoliPageException(
-                'API returned malformed JSON: ' . $e->getMessage(),
-                PoliPageException::INTERNAL_ERROR,
-                $response->getStatusCode(),
-                $response->getHeaderLine(Constants::HEADER_REQUEST_ID) !== ''
-                    ? $response->getHeaderLine(Constants::HEADER_REQUEST_ID)
-                    : null,
+            $status = $response->getStatusCode();
+            $requestId = $response->getHeaderLine(Constants::HEADER_REQUEST_ID);
+            $error = new InvalidResponseException(
+                str_replace('{status}', (string) $status, Constants::MESSAGE_INVALID_RESPONSE),
+                PoliPageException::INVALID_RESPONSE,
+                $status,
+                $requestId !== '' ? $requestId : null,
                 $e,
             );
+            $this->logger->error('polipage: terminal failure', [
+                'error_code' => $error->errorCode,
+                'status' => $error->status,
+            ]);
+            $this->fireOnError($error);
+
+            throw $error;
         }
         if (!is_array($decoded)) {
             throw new PoliPageException(

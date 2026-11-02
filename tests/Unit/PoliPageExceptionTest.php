@@ -13,6 +13,7 @@ use PoliPage\Exception\BadRequestException;
 use PoliPage\Exception\ConnectionException;
 use PoliPage\Exception\GoneException;
 use PoliPage\Exception\InternalServerException;
+use PoliPage\Exception\InvalidResponseException;
 use PoliPage\Exception\NotFoundException;
 use PoliPage\Exception\PermissionDeniedException;
 use PoliPage\Exception\RateLimitException;
@@ -219,9 +220,73 @@ final class PoliPageExceptionTest extends TestCase
 
     public function testToPayloadUses504ForTimeoutException(): void
     {
-        $err = new \PoliPage\Exception\TimeoutException('slow', PoliPageException::TIMEOUT);
+        $err = new TimeoutException('slow', PoliPageException::TIMEOUT);
         self::assertSame(504, $err->toPayload()['status']);
         self::assertNull($err->status);
+    }
+
+    public function testToPayloadUses502ForInvalidResponseAndKeepsTheReal2xx(): void
+    {
+        $err = new InvalidResponseException(
+            'Invalid response: HTTP 200 body is not JSON',
+            PoliPageException::INVALID_RESPONSE,
+            200,
+            'req_invalid',
+        );
+        self::assertSame(
+            [
+                'code' => 'invalid_response',
+                'message' => 'Invalid response: HTTP 200 body is not JSON',
+                'status' => 502,
+                'requestId' => 'req_invalid',
+            ],
+            $err->toPayload(),
+        );
+        self::assertSame(200, $err->status, 'the error keeps the real 2xx; only the payload says 502');
+    }
+
+    /**
+     * @return iterable<string, array{PoliPageException}>
+     */
+    public static function oneErrorOfEachKind(): iterable
+    {
+        yield 'api' => [new NotFoundException('Template not found', 'TEMPLATE_NOT_FOUND', 404, 'req_1')];
+        yield 'network_error' => [new ConnectionException('Network request failed', PoliPageException::NETWORK_ERROR)];
+        yield 'timeout' => [new TimeoutException('Request timed out after 1000ms', PoliPageException::TIMEOUT)];
+        yield 'invalid_response' => [new InvalidResponseException('m', PoliPageException::INVALID_RESPONSE, 200)];
+        yield 'io_error' => [new PoliPageException('Failed to write PDF: x', PoliPageException::IO_ERROR)];
+        yield 'DOWNLOAD_FAILED' => [new PoliPageException('Failed to download PDF: timeout', PoliPageException::DOWNLOAD_FAILED)];
+    }
+
+    #[DataProvider('oneErrorOfEachKind')]
+    public function testToPayloadHasExactlyTheFourKeysInOrder(PoliPageException $err): void
+    {
+        self::assertSame(['code', 'message', 'status', 'requestId'], array_keys($err->toPayload()));
+    }
+
+    public function testInvalidResponseIsNeverRetryableNorANetworkError(): void
+    {
+        $err = new InvalidResponseException('m', PoliPageException::INVALID_RESPONSE, 200);
+        self::assertFalse($err->isRetryable());
+        self::assertFalse($err->isNetworkError());
+        self::assertFalse($err->isApiStatusError(), 'a 2xx is not an API status error');
+    }
+
+    public function testIoErrorHasNoStatusAndIsNeverRetryable(): void
+    {
+        $err = new PoliPageException('Failed to write PDF: disk full', PoliPageException::IO_ERROR);
+        self::assertNull($err->status);
+        self::assertNull($err->toPayload()['status']);
+        self::assertFalse($err->isRetryable());
+        self::assertFalse($err->isNetworkError());
+    }
+
+    public function testNeverRetryableSdkCodesStayNonRetryableWhateverTheStatus(): void
+    {
+        foreach ([PoliPageException::INVALID_RESPONSE, PoliPageException::IO_ERROR, PoliPageException::DOWNLOAD_FAILED] as $code) {
+            self::assertFalse((new PoliPageException('m', $code, 503))->isRetryable(), $code);
+            self::assertFalse((new PoliPageException('m', $code, 429))->isRetryable(), $code);
+        }
     }
 
     /**
@@ -261,7 +326,10 @@ final class PoliPageExceptionTest extends TestCase
 
     public function testKnownApiCodesAreExactlyTheThirtyTwoOfTheContract(): void
     {
-        $sdkCodes = ['invalid_options', 'network_error', 'timeout', 'aborted', 'unknown_error', 'DOWNLOAD_FAILED'];
+        $sdkCodes = [
+            'invalid_options', 'network_error', 'timeout', 'aborted', 'unknown_error', 'DOWNLOAD_FAILED',
+            'invalid_response', 'io_error',
+        ];
         $apiCodes = [];
         foreach ((new \ReflectionClass(PoliPageException::class))->getConstants() as $value) {
             if (\is_string($value) && !\in_array($value, $sdkCodes, true)) {

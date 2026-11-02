@@ -8,7 +8,11 @@ use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Attributes\CoversNothing;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use PoliPage\Exception\ConnectionException;
+use PoliPage\Exception\InvalidResponseException;
+use PoliPage\Exception\TimeoutException;
 use PoliPage\Internal\Constants;
+use PoliPage\PoliPageException;
 
 /**
  * Conformance with the Poli Page API contract
@@ -100,6 +104,9 @@ final class ContractTest extends TestCase
             'network_error' => Constants::MESSAGE_NETWORK_ERROR,
             'timeout' => Constants::MESSAGE_TIMEOUT,
             'DOWNLOAD_FAILED' => Constants::MESSAGE_DOWNLOAD_FAILED,
+            'invalid_response' => Constants::MESSAGE_INVALID_RESPONSE,
+            // The SDK has a render-to-file helper, renderToFile().
+            'io_error' => Constants::MESSAGE_IO_ERROR,
             'PROJECT_REQUIRED_FOR_DOCUMENT' => Constants::MESSAGE_PROJECT_REQUIRED,
         ];
         $policy = [];
@@ -108,6 +115,7 @@ final class ContractTest extends TestCase
         }
         self::assertSame($policy, $messages);
         self::assertSame($contract->downloadNetworkMessage(), Constants::MESSAGE_DOWNLOAD_FAILED_NETWORK);
+        self::assertSame($contract->downloadTimeoutMessage(), Constants::MESSAGE_DOWNLOAD_FAILED_TIMEOUT);
 
         $sdkCodes = array_keys($errors);
         if (!$contract->runsCancellation()) {
@@ -117,6 +125,24 @@ final class ContractTest extends TestCase
         $raised = array_keys($messages);
         sort($raised);
         self::assertSame($sdkCodes, $raised, 'the SDK codes of the policy this SDK raises');
+    }
+
+    public function testToPayloadStatusMatchesThePolicy(): void
+    {
+        $errors = [
+            'network_error' => new ConnectionException('m', PoliPageException::NETWORK_ERROR),
+            'timeout' => new TimeoutException('m', PoliPageException::TIMEOUT),
+            'invalid_response' => new InvalidResponseException('m', PoliPageException::INVALID_RESPONSE, 200),
+        ];
+        $statuses = [];
+        foreach ($errors as $code => $error) {
+            $statuses[$code] = $error->toPayload()['status'];
+        }
+        $policy = $this->contract()->implStatusForSdkCode();
+        ksort($policy);
+        ksort($statuses);
+        self::assertSame($policy, $statuses);
+        self::assertSame($this->contract()->stringList('implErrorBody'), array_keys($errors['timeout']->toPayload()));
     }
 
     public function testRetryPolicyMatches(): void

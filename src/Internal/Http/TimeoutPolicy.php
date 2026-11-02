@@ -15,9 +15,9 @@ use Psr\Http\Message\ResponseInterface;
  *
  * PSR-18 deliberately does not standardise per-request options (the spec
  * defers to the implementation). To honour the cross-SDK contract
- * (`timeout` is a per-attempt client option, SDK spec §4.1 and §9.4), this
- * helper detects the underlying client and routes through its native
- * per-request options API:
+ * (`timeout` is a per-attempt client option that also bounds the PDF
+ * download), this helper detects the underlying client and routes through
+ * its native per-request options API:
  *
  *  - **Guzzle 7 / 8** — `$client->send($request, ['timeout' => $s])`
  *    (Guzzle's pre-PSR-18 path), which honours per-request options.
@@ -26,6 +26,17 @@ use Psr\Http\Message\ResponseInterface;
  *    `withOptions()` with `max_duration` (the total bound, like Guzzle's
  *    `timeout`) and `timeout` (Symfony's idle timeout) set to the attempt's
  *    timeout, made once per client and option set.
+ *
+ * **Idle timeout.** The body of `render->pdfStream()` is read at the
+ * caller's pace, so its download is bounded by an idle timeout instead of a
+ * total: the wait for the first byte and each gap between two chunks.
+ * Symfony gets `timeout` without `max_duration`. Guzzle gets `stream` (its
+ * default handler stack then reads the body lazily, through its stream
+ * handler) and `timeout`, the wait for the answer; Guzzle 8 also gets
+ * `read_timeout` for each gap, which Guzzle 7's stream handler bounds with
+ * `timeout` itself. A Guzzle handler stack without the stream handler (PHP's
+ * `allow_url_fopen` off, say) buffers the whole body before `send()`
+ * returns, and `timeout` then bounds that whole download.
  *
  *  - **Other PSR-18 clients** — the timeout cannot be applied per request
  *    through the PSR-18 contract: configure it on the client you inject.
@@ -63,10 +74,16 @@ final class TimeoutPolicy
     /** @var \WeakMap<object, mixed>|null client => (serialized options => clone) */
     private static ?\WeakMap $symfonyClones = null;
 
+    /**
+     * @param bool $idle `$timeoutSeconds` is an idle timeout (the wait for the first byte and each
+     *                   gap between two chunks) instead of a bound on the whole exchange: for a
+     *                   body the caller streams
+     */
     public static function send(
         ClientInterface $client,
         RequestInterface $request,
         ?float $timeoutSeconds,
+        bool $idle = false,
     ): ResponseInterface {
         $freshConnection = $request->getMethod() === 'POST' && \defined('CURLOPT_FRESH_CONNECT');
 
@@ -81,6 +98,16 @@ final class TimeoutPolicy
                 \GuzzleHttp\RequestOptions::HTTP_ERRORS => false,
                 \GuzzleHttp\RequestOptions::ALLOW_REDIRECTS => false,
             ];
+            if ($idle) {
+                $options[\GuzzleHttp\RequestOptions::STREAM] = true;
+                // Why not on Guzzle 7: its stream handler applies only a tenth
+                // of `read_timeout`'s fractional part (0.5 s waits 50 ms). Its
+                // `timeout` there is the socket's own timeout, which bounds
+                // each read already.
+                if (self::guzzleMajorVersion() >= 8) {
+                    $options[\GuzzleHttp\RequestOptions::READ_TIMEOUT] = $timeoutSeconds;
+                }
+            }
             if ($freshConnection) {
                 // Read by Guzzle's curl handler only; its stream handler opens
                 // a connection per request anyway. Guzzle merges request
@@ -100,7 +127,9 @@ final class TimeoutPolicy
             $options = [];
             if ($timeoutSeconds !== null) {
                 $options['timeout'] = $timeoutSeconds;
-                $options['max_duration'] = $timeoutSeconds;
+                if (!$idle) {
+                    $options['max_duration'] = $timeoutSeconds;
+                }
             }
             if ($freshConnection) {
                 // `extra.curl` is read by CurlHttpClient only. Symfony gives it
@@ -220,6 +249,22 @@ final class TimeoutPolicy
         }
 
         return $clones;
+    }
+
+    /**
+     * Guzzle's major version, read at run time so the check holds whatever
+     * Guzzle version static analysis sees.
+     */
+    private static function guzzleMajorVersion(): int
+    {
+        $version = self::constantValue(\GuzzleHttp\ClientInterface::class . '::MAJOR_VERSION');
+
+        return is_int($version) ? $version : 0;
+    }
+
+    private static function constantValue(string $name): mixed
+    {
+        return \defined($name) ? \constant($name) : null;
     }
 
     /**

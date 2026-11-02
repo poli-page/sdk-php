@@ -11,14 +11,16 @@ use PoliPage\Internal\Constants;
  * Base exception type for every error raised by the Poli Page SDK.
  *
  * `$errorCode` is a string carrying either a reserved SDK code (see the
- * `*_ERROR`, `INVALID_OPTIONS`, `TIMEOUT`, `ABORTED` constants) or an API
- * code passed through verbatim from the wire (spec §7.2). `$status` is the
- * HTTP status when the error originated from a non-2xx response; it is
- * `null` for SDK-internal failures and transport-level errors.
+ * `*_ERROR`, `INVALID_OPTIONS`, `TIMEOUT`, `ABORTED`, `INVALID_RESPONSE`
+ * constants) or an API code passed through verbatim from the wire.
+ * `$status` is the HTTP status when the error originated from an HTTP
+ * answer (a non-2xx, a failed download, or a 2xx whose body is not JSON);
+ * it is `null` for SDK-internal failures and transport-level errors.
  *
  * The class is concrete so the SDK can throw it directly for
- * `INVALID_OPTIONS`, `ABORTED`, `UNKNOWN_ERROR`, `DOWNLOAD_FAILED`, and any
- * other case that does not fit one of the specialised subclasses under
+ * `INVALID_OPTIONS`, `ABORTED`, `UNKNOWN_ERROR`, `DOWNLOAD_FAILED`,
+ * `IO_ERROR`, and any other case that does not fit one of the specialised
+ * subclasses under
  * {@see \PoliPage\Exception}. Idiomatic PHP usage favours `instanceof`
  * checks against the hierarchy over predicate calls.
  */
@@ -32,6 +34,10 @@ class PoliPageException extends \RuntimeException
     public const UNKNOWN_ERROR = 'unknown_error';
     public const DOWNLOAD_FAILED = 'DOWNLOAD_FAILED';
     public const INTERNAL_ERROR = 'INTERNAL_ERROR';
+    /** A 2xx answer whose body is not JSON, from a method that expects JSON. `$status` is that 2xx. Not retried. */
+    public const INVALID_RESPONSE = 'invalid_response';
+    /** `renderToFile()` could not write the file. No `$status`; the PHP error is `getPrevious()`. Not retried. */
+    public const IO_ERROR = 'io_error';
 
     // Known API codes — passed through verbatim. The set is open: the API may
     // return a code missing here, and `$errorCode` carries it unchanged.
@@ -71,6 +77,13 @@ class PoliPageException extends \RuntimeException
     /** Same wire value as INTERNAL_ERROR; distinct constant name disambiguates at call sites. */
     public const API_INTERNAL_ERROR = 'INTERNAL_ERROR';
 
+    private const NEVER_RETRYABLE_SDK_CODES = [
+        self::ABORTED,
+        self::DOWNLOAD_FAILED,
+        self::INVALID_RESPONSE,
+        self::IO_ERROR,
+    ];
+
     public readonly string $errorCode;
     public readonly ?int $status;
     public readonly ?string $requestId;
@@ -88,7 +101,7 @@ class PoliPageException extends \RuntimeException
         $this->requestId = $requestId;
     }
 
-    // Predicate helpers (SDK spec §8.1), the same in every Poli Page SDK. They
+    // Predicate helpers, the same in every Poli Page SDK. They
     // read `status` and `code`, so they also hold for an error that is not one
     // of the status subclasses: a DOWNLOAD_FAILED with the storage's 403 is an
     // auth error. Idiomatic PHP can catch the subclasses instead.
@@ -126,15 +139,19 @@ class PoliPageException extends \RuntimeException
     }
 
     /**
-     * A network error, a timeout, a 5xx or a 429 the SDK retries (SDK spec
-     * §9.1). Never `aborted`, and never `QUOTA_EXCEEDED`,
-     * `OVERAGE_CAP_EXCEEDED` or `STORAGE_ACCESS_DENIED`: waiting cannot fix
-     * them. A `DOWNLOAD_FAILED` is never retryable either, whatever the
-     * storage status.
+     * A network error, a timeout, a 5xx or a 429 the SDK retries. Never
+     * `aborted`, and never `QUOTA_EXCEEDED`, `OVERAGE_CAP_EXCEEDED` or
+     * `STORAGE_ACCESS_DENIED`: waiting cannot fix them. Never
+     * `invalid_response` (whatever sits between the SDK and the API answers
+     * the same way again) or `io_error` (the file stays unwritable). A
+     * `DOWNLOAD_FAILED` is never retryable either, whatever the storage
+     * status: fetch the document again for a fresh URL instead.
      */
     public function isRetryable(): bool
     {
-        if ($this->errorCode === self::ABORTED || $this->errorCode === self::DOWNLOAD_FAILED || in_array($this->errorCode, Constants::NON_RETRYABLE_CODES, true)) {
+        if (in_array($this->errorCode, self::NEVER_RETRYABLE_SDK_CODES, true)
+            || in_array($this->errorCode, Constants::NON_RETRYABLE_CODES, true)
+        ) {
             return false;
         }
         if ($this->isNetworkError()) {
@@ -158,11 +175,14 @@ class PoliPageException extends \RuntimeException
     }
 
     /**
-     * Canonical wire payload for framework integrations:
-     * `{code, message, status, requestId}`. `status` surfaces 503 for
-     * `ConnectionException`, 504 for `TimeoutException`, and the API
-     * status otherwise. The {@see $status} property itself stays `null`
-     * for transport errors — only the payload surfaces 503/504.
+     * Canonical wire payload for framework integrations: exactly the keys
+     * `code`, `message`, `status` and `requestId`, the HTTP body an
+     * integration answers with. `status` surfaces 503 for
+     * `ConnectionException`, 504 for `TimeoutException`, 502 for
+     * `InvalidResponseException` (`invalid_response`), and the API status
+     * otherwise. The {@see $status} property itself is unchanged: `null` for
+     * transport errors, the real 2xx for `invalid_response`. `status` and
+     * `requestId` are `null` when unknown.
      *
      * @return array{code: string, message: string, status: ?int, requestId: ?string}
      */
@@ -177,7 +197,8 @@ class PoliPageException extends \RuntimeException
     }
 
     /**
-     * Hook overridden by ConnectionException → 503 and TimeoutException → 504.
+     * Hook overridden by ConnectionException → 503, TimeoutException → 504
+     * and InvalidResponseException → 502.
      */
     protected function payloadStatus(): ?int
     {

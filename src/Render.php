@@ -25,6 +25,8 @@ final class Render
      * Render a PDF and return its raw bytes. Two HTTP calls under the hood:
      * `POST /v1/render` produces a stored document, then `GET presignedPdfUrl`
      * fetches the bytes. From the caller's perspective it's one operation.
+     * The download is bounded as a whole by the timeout (`$input->timeout`,
+     * else the client's) and is never retried.
      *
      * @throws Exception\AuthenticationException   on 401 from /v1/render
      * @throws Exception\PermissionDeniedException on 403 from /v1/render
@@ -33,6 +35,7 @@ final class Render
      * @throws Exception\RateLimitException        on 429 from /v1/render (after retries)
      * @throws Exception\InternalServerException   on 5xx from /v1/render (after retries)
      * @throws Exception\ConnectionException       on transport failure
+     * @throws Exception\InvalidResponseException on a 2xx from /v1/render whose body is not JSON
      * @throws PoliPageException                   on DOWNLOAD_FAILED / INTERNAL_ERROR / catch-all
      */
     public function pdf(RenderInput $input): string
@@ -46,10 +49,15 @@ final class Render
      * PDF in memory. The caller owns the stream's lifecycle — close it
      * (or let `__destruct` close it) when done.
      *
-     * An explicit `$input->timeout` also bounds the download until its body
-     * is fully read; with Symfony HttpClient that includes the time the
-     * caller spends reading the stream. Leave it unset to stream without a
-     * bound from the SDK (the injected client's own timeout still applies).
+     * The download is bounded by the timeout (`$input->timeout`, else the
+     * client's) as an idle timeout, not a total: the wait for the first byte
+     * and each gap between two chunks, so a large PDF read at the caller's
+     * pace is not cut off. Before the answer, this method throws
+     * `DOWNLOAD_FAILED` with the message `Failed to download PDF: timeout`;
+     * mid-body, reading the stream throws it. With Guzzle, the body streams
+     * through its stream handler (part of its default handler stack); a
+     * handler stack without it buffers the PDF, and the timeout then bounds
+     * the whole download.
      *
      * @throws PoliPageException see {@see pdf} for the failure modes
      */

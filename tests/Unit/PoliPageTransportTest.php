@@ -10,6 +10,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use PoliPage\Events\RetryEvent;
 use PoliPage\Exception\InternalServerException;
+use PoliPage\Exception\InvalidResponseException;
 use PoliPage\PoliPage;
 use PoliPage\PoliPageException;
 use PoliPage\RenderInput;
@@ -129,7 +130,7 @@ final class PoliPageTransportTest extends TestCase
         }
     }
 
-    public function testMalformedJsonResponseRaisesInternalError(): void
+    public function testMalformedJsonResponseRaisesInvalidResponse(): void
     {
         $factory = new Psr17Factory();
         $mock = new MockClient();
@@ -145,9 +146,10 @@ final class PoliPageTransportTest extends TestCase
 
         try {
             $client->render->document(new RenderInput(project: 'p', template: 't', data: []));
-            self::fail('Expected PoliPageException(INTERNAL_ERROR)');
-        } catch (PoliPageException $e) {
-            self::assertSame(PoliPageException::INTERNAL_ERROR, $e->errorCode);
+            self::fail('Expected invalid_response');
+        } catch (InvalidResponseException $e) {
+            self::assertSame(PoliPageException::INVALID_RESPONSE, $e->errorCode);
+            self::assertSame('Invalid response: HTTP 200 body is not JSON', $e->getMessage());
             self::assertSame(200, $e->status, 'status from the wire response should propagate');
         }
     }
