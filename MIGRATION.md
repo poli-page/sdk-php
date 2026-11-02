@@ -5,6 +5,59 @@ The package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
 before 1.0.0 a breaking change ships in a minor bump (0.9.x → 0.10.0), from
 1.0.0 on only in a major bump, and it always comes with an entry here.
 
+## From 0.11.0 to 0.13.0
+
+The SDK now shares its major.minor with the Poli Page API, so there is no
+0.12. This release follows the API contract v0.13.0.
+
+### A 2xx whose body is not JSON is `invalid_response`
+
+It was `INTERNAL_ERROR` (`API returned malformed JSON: …`). It is now a
+`PoliPage\Exception\InvalidResponseException`, code `invalid_response`,
+message `Invalid response: HTTP <status> body is not JSON`, with the real
+2xx as `status` and the request id. It is not retried. In an integration,
+`toPayload()` answers 502 for it.
+
+```php
+// 0.11.0
+} catch (PoliPageException $e) {
+    if ($e->errorCode === PoliPageException::INTERNAL_ERROR && $e->status === 200) {
+        // a proxy answered instead of the API
+    }
+}
+
+// 0.13.0
+} catch (InvalidResponseException $e) {
+    // a proxy answered instead of the API; $e->status is its 2xx
+}
+```
+
+### `renderToFile()` raises `io_error`
+
+A file that cannot be written was `invalid_options`; it is now `io_error`,
+with the message `Failed to write PDF: <reason>` and PHP's error as
+`getPrevious()`. The target is left untouched on any failure.
+
+```php
+// 0.13.0
+} catch (PoliPageException $e) {
+    if ($e->errorCode === PoliPageException::IO_ERROR) {
+        // disk full, permissions, a missing mount...
+    }
+}
+```
+
+### The PDF download is bounded by `timeout`
+
+The presigned-URL download now uses the client's `timeout` (60 s by
+default) when the call sets none; it had no bound before. `render->pdf()`
+and `downloadPdf()` bound the whole download, so raise `timeout` if your
+PDFs take longer than that to download. `render->pdfStream()` uses it as an
+idle timeout, the wait for the first byte and each gap between two chunks,
+and is never cut off for its total length. Past the timeout the error is
+`DOWNLOAD_FAILED` with the message `Failed to download PDF: timeout` (was
+`Failed to download PDF: network error`).
+
 ## From 0.10.0 to 0.11.0
 
 The SDK now follows the retry policy and the error messages of the Poli

@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-02
+
+Conformance with the Poli Page API contract v0.13.0
+([poli-page/api-contract](https://github.com/poli-page/api-contract)). The
+SDK now shares its major.minor with the Poli Page API, so it moves from 0.11
+to 0.13. See [MIGRATION.md](MIGRATION.md#from-0110-to-0130).
+
+### Added
+
+- `invalid_response`: a 2xx answer whose body is not JSON, from a method that
+  expects JSON (the render call of `render->document()`, `render->pdf()` and
+  `render->pdfStream()`, `documents->get()`, `documents->thumbnails()`), raises
+  `PoliPage\Exception\InvalidResponseException` with the code
+  `invalid_response`, the message `Invalid response: HTTP <status> body is not
+  JSON`, the real 2xx as `status`, the answer's `x-request-id` as `requestId`,
+  and the JSON error as `getPrevious()`. It is never retried, `isRetryable()`
+  is `false`, and `onError` fires with it. Such a body usually comes from a
+  proxy or a captive portal between the SDK and the API.
+- `io_error`: `renderToFile()` raises it when it cannot write the file
+  (creating a parent directory, opening, writing or moving it into place).
+  No status, the message `Failed to write PDF: <reason>` with PHP's own error
+  text, that error as `getPrevious()`, never retried.
+- `toPayload()` answers `status` 502 for `invalid_response`. The error's own
+  `status` keeps the real 2xx.
+- `scripts/release.sh` and the Release workflow check that the API contract
+  pinned for the tests has the release's major.minor.
+
+### Changed
+
+- **Breaking:** a 2xx whose body is not JSON was `INTERNAL_ERROR`
+  (`API returned malformed JSON: …`); it is now `invalid_response` (above).
+- **Breaking:** `renderToFile()` failures to write the file were
+  `invalid_options` with messages of their own; they are now `io_error`.
+- `renderToFile()` writes to a temporary file in the target's directory and
+  renames it over the target only once the PDF is complete. When anything
+  fails (the render, the download or the write), the target is left as it
+  was: an existing file keeps its content and a missing one is not created.
+  The directory and the temporary file are prepared before the render, so a
+  path that cannot be written costs no render.
+- The presigned-URL download is bounded by the client's `timeout` (or the
+  call's `RenderInput::$timeout` / `downloadPdf($timeout)`). Before, it had no
+  bound unless the call passed one, and Guzzle's defaults could wait forever.
+  For `render->pdf()` and `downloadPdf()`, the timeout bounds the whole
+  download. For `render->pdfStream()`, it is an idle timeout: the wait for the
+  first byte and each gap between two chunks, so a large PDF read at the
+  caller's pace is not cut off (before, an explicit timeout bounded the whole
+  stream with Symfony HttpClient).
+- A download that outlasts its timeout raises `DOWNLOAD_FAILED` with the
+  message `Failed to download PDF: timeout` (was
+  `Failed to download PDF: network error`). No status, not retryable.
+- With Guzzle, `render->pdfStream()` now streams the PDF through Guzzle's
+  stream handler (part of its default handler stack) instead of buffering it
+  before returning.
+
 ## [0.11.0] - 2026-10-30
 
 Conformance with the Poli Page API contract v1.3.0
