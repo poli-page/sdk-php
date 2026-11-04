@@ -82,6 +82,12 @@ final class TimeoutPolicy
 {
     private const TIMEOUT_PHRASES = ['timed out', 'timeout reached', 'max duration'];
 
+    /**
+     * Guzzle 8's `stream_factory` request option, by name: Guzzle 7's
+     * `RequestOptions` has no such constant.
+     */
+    private const GUZZLE_STREAM_FACTORY = 'stream_factory';
+
     /** PSR-7 streams that hold a PHP stream resource and nothing else. */
     private const PLAIN_STREAMS = ['GuzzleHttp\\Psr7\\Stream', 'Nyholm\\Psr7\\Stream'];
 
@@ -131,7 +137,7 @@ final class TimeoutPolicy
                 if (self::guzzleMajorVersion() >= 8) {
                     $options[\GuzzleHttp\RequestOptions::READ_TIMEOUT] = $timeoutSeconds ?? 0;
                     if ($recorder !== null) {
-                        $options[\GuzzleHttp\RequestOptions::STREAM_FACTORY] = $recorder->around(self::guzzleStreamFactory($client));
+                        $options[self::GUZZLE_STREAM_FACTORY] = $recorder->around(self::guzzleStreamFactory($client));
                     }
                 }
             }
@@ -332,7 +338,7 @@ final class TimeoutPolicy
     private static function guzzleStreamFactory(\GuzzleHttp\Client $client): StreamFactoryInterface
     {
         $configured = self::hasMethod($client, 'getConfig')
-            ? $client->getConfig(\GuzzleHttp\RequestOptions::STREAM_FACTORY)
+            ? $client->getConfig(self::GUZZLE_STREAM_FACTORY)
             : null;
 
         return $configured instanceof StreamFactoryInterface ? $configured : new \GuzzleHttp\Psr7\HttpFactory();
