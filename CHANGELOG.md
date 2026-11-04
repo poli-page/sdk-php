@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-11-04
+
+`renderToFile()` and the `render->pdfStream()` timeout now follow the same
+rules as the other Poli Page SDKs. Still the Poli Page API contract v0.13.0.
+
+### Changed
+
+- **Breaking:** `renderToFile()` refuses, with `io_error` and before any API
+  call, an existing target that is not a regular file (a directory, a FIFO,
+  a socket, a device such as `/dev/stdout` when stdout is a pipe or a
+  terminal), with the message
+  `Failed to write PDF: <path>: not a regular file`. 0.13.0 rendered first,
+  then replaced a FIFO or a device with a regular file, or failed on a
+  directory after the render. To write the PDF to a pipe or to stdout, copy
+  `render->pdfStream()` into it.
+- **Breaking:** `renderToFile()` refuses, with `io_error` and before any API
+  call, an existing target that is not writable (a read-only file), and
+  leaves it untouched. 0.13.0 replaced it when its directory was writable.
+  The check reads the file's attributes, so a process running as root may
+  still replace a read-only file.
+- `renderToFile()` follows a symbolic link (or a chain of them) to the file
+  it points to, writes that file and leaves the link a link. A relative link
+  is read against the real directory of the link, as the file system does.
+  0.13.0 replaced the link itself with a regular file. A link loop is
+  `io_error`.
+- `renderToFile()` keeps the permission bits of an existing target. Not
+  kept, since the PDF replaces the file with a new one: its owner and group
+  (they become those of the calling process), its other hard links (they
+  keep the old content), and its setuid, setgid and sticky bits. A new file
+  gets the default mode of your umask, as before.
+- `renderToFile()`'s `io_error` message names the path you passed, never the
+  temporary file: `Failed to write PDF: <path>: <reason>`, the reason being
+  the system's own text (`Permission denied`, say). PHP's full error is still
+  `getPrevious()`.
+- `render->pdfStream()` and `renderToFile()`: the wait for the answer's
+  headers and the wait for the first byte of the PDF share one `timeout`,
+  from the start of the download request; after that, the timeout bounds
+  each gap between two chunks, as before. 0.13.0 gave each of the two first
+  waits a whole timeout of its own. This applies with Guzzle and Symfony
+  HTTP Client, with three exceptions:
+  - with Guzzle, response headers that trickle in, each gap within the
+    timeout, are reported as a timeout only once they are complete: Guzzle
+    reads them inside PHP's HTTP stream wrapper, which bounds only each gap
+    and offers no hook to stop it earlier. Symfony HTTP Client stops them
+    once the budget is gone;
+  - a body Guzzle 7 decodes (a compressed answer) and a Symfony
+    `Psr18Client` whose PSR-7 streams come from another library than
+    guzzlehttp/psr7 or nyholm/psr7 keep a whole timeout for the first byte.
+
 ## [0.13.0] - 2026-11-02
 
 Conformance with the Poli Page API contract v0.13.0
@@ -365,7 +414,8 @@ breaking changes may still land before 1.0.0.
   macOS and Windows for 8.5. `composer validate --strict`,
   `composer audit`, lint, static analysis, and unit tests all gated.
 
-[Unreleased]: https://github.com/poli-page/sdk-php/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/poli-page/sdk-php/compare/v0.13.1...HEAD
+[0.13.1]: https://github.com/poli-page/sdk-php/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/poli-page/sdk-php/compare/v0.11.0...v0.13.0
 [0.11.0]: https://github.com/poli-page/sdk-php/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/poli-page/sdk-php/compare/v0.9.0...v0.10.0

@@ -25,6 +25,10 @@ use Psr\Http\Message\StreamInterface;
  * `rewind()`), not the bytes returned, so re-reading or skipping part of a
  * complete body never fails it.
  *
+ * Until the first byte of the body is in, reads wait only for what is left
+ * of the budget it shares with the wait for the headers
+ * ({@see FirstByteDeadline}); after that, the idle timeout bounds each gap.
+ *
  * Not covered: a chunked or content-encoded answer has no length to check, so
  * a connection closed mid-body still ends that stream silently under Guzzle
  * 7's stream handler (Guzzle 8, Symfony HttpClient and cURL detect it
@@ -34,15 +38,23 @@ use Psr\Http\Message\StreamInterface;
  */
 final class DownloadStream implements StreamInterface
 {
+    /** The most bytes the first read asks for, when the caller reads to the end. */
+    private const FIRST_READ = 8192;
+
     /** The position reached in the body: the bytes read from its start. */
     private int $received = 0;
 
     /**
-     * @param int|null $expectedLength the answer's `Content-Length`, when it gives the body's
-     *                                 length ({@see self::expectedLength()})
+     * @param int|null               $expectedLength the answer's `Content-Length`, when it gives the
+     *                                               body's length ({@see self::expectedLength()})
+     * @param FirstByteDeadline|null $firstByte      bounds the reads until the first byte is in,
+     *                                               then is dropped
      */
-    public function __construct(private readonly StreamInterface $stream, private readonly ?int $expectedLength = null)
-    {
+    public function __construct(
+        private readonly StreamInterface $stream,
+        private readonly ?int $expectedLength = null,
+        private ?FirstByteDeadline $firstByte = null,
+    ) {
     }
 
     /**
@@ -96,6 +108,11 @@ final class DownloadStream implements StreamInterface
 
     public function __toString(): string
     {
+        // Until the first byte is in, nothing was read: no need to rewind.
+        if ($this->firstByte !== null) {
+            return $this->getContents();
+        }
+
         return $this->reading(function (): string {
             if ($this->stream->isSeekable()) {
                 $this->stream->rewind();
@@ -155,12 +172,14 @@ final class DownloadStream implements StreamInterface
     public function seek(int $offset, int $whence = SEEK_SET): void
     {
         $this->stream->seek($offset, $whence);
+        $this->firstByte = null;
         $this->received = $this->stream->tell();
     }
 
     public function rewind(): void
     {
         $this->stream->rewind();
+        $this->firstByte = null;
         $this->received = 0;
     }
 
@@ -185,6 +204,36 @@ final class DownloadStream implements StreamInterface
     }
 
     /**
+     * Until the first byte is in, a read waits only for what is left of the
+     * first-byte budget ({@see FirstByteDeadline}); a read to the end first
+     * reads one chunk that way, then the rest with the idle timeout.
+     *
+     * @param \Closure(): string $read
+     * @param bool               $toTheEnd `$read` reads to the end of the body
+     */
+    private function reading(\Closure $read, bool $toTheEnd): string
+    {
+        $firstByte = $this->firstByte;
+        if ($firstByte === null) {
+            return $this->guarded($read, $toTheEnd);
+        }
+        $firstByte->arm();
+        try {
+            $bytes = $this->guarded($toTheEnd ? fn (): string => $this->stream->read(self::FIRST_READ) : $read, false);
+        } finally {
+            $firstByte->disarm();
+        }
+        if ($bytes !== '' || $this->stream->eof()) {
+            $this->firstByte = null;
+        }
+        if ($toTheEnd && !$this->stream->eof()) {
+            $bytes .= $this->guarded($read, true);
+        }
+
+        return $bytes;
+    }
+
+    /**
      * A PSR-7 stream over a socket (guzzlehttp/psr7 2.x, say) can report an
      * elapsed read timeout only through the socket's `timed_out` flag: with a
      * generic read error, an empty `read()`, or a `getContents()` that stops
@@ -196,7 +245,7 @@ final class DownloadStream implements StreamInterface
      * @param \Closure(): string $read
      * @param bool               $toTheEnd `$read` reads to the end of the body
      */
-    private function reading(\Closure $read, bool $toTheEnd): string
+    private function guarded(\Closure $read, bool $toTheEnd): string
     {
         try {
             $bytes = BodyReader::guard($read);

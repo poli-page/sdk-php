@@ -7,8 +7,10 @@ namespace PoliPage\Tests\Unit;
 use GuzzleHttp\Psr7\FnStream;
 use GuzzleHttp\Psr7\Utils;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use PoliPage\Internal\Http\DownloadStream;
+use PoliPage\Internal\Http\FirstByteDeadline;
 use PoliPage\PoliPageException;
 use Psr\Http\Message\StreamInterface;
 
@@ -195,5 +197,121 @@ final class DownloadStreamTest extends TestCase
             'eof' => static fn (): bool => false,
             'getMetadata' => static fn (?string $key = null): mixed => $key === 'timed_out' ? $timedOut : null,
         ]);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function reads(): iterable
+    {
+        yield 'read' => ['read'];
+        yield 'getContents' => ['getContents'];
+        yield '__toString' => ['__toString'];
+    }
+
+    #[DataProvider('reads')]
+    public function testTheFirstReadWaitsOnlyForWhatIsLeftOfTheBudget(string $read): void
+    {
+        [$reader] = $this->socketPair();
+        $stream = new DownloadStream(
+            Utils::streamFor($reader),
+            8,
+            new FirstByteDeadline($reader, hrtime(true) + 200_000_000, 30.0),
+        );
+
+        $startedAt = hrtime(true);
+        try {
+            self::readWith($stream, $read);
+            self::fail('Expected DOWNLOAD_FAILED');
+        } catch (PoliPageException $e) {
+            self::assertSame('Failed to download PDF: timeout', $e->getMessage());
+        }
+        self::assertLessThan(5.0, (hrtime(true) - $startedAt) / 1e9, 'not the 30 s idle timeout');
+    }
+
+    /**
+     * A read to the end takes a first chunk within the budget, then the rest.
+     */
+    #[DataProvider('reads')]
+    public function testAfterTheFirstByteTheWholeBodyIsRead(string $read): void
+    {
+        $body = str_repeat('%PDF-chunk', 2000);
+        $memory = self::memory($body);
+        $stream = new DownloadStream(
+            Utils::streamFor($memory),
+            \strlen($body),
+            new FirstByteDeadline($memory, hrtime(true) + 5_000_000_000, 5.0),
+        );
+
+        $bytes = '';
+        do {
+            $bytes .= self::readWith($stream, $read);
+        } while (!$stream->eof());
+
+        self::assertSame($body, $bytes);
+    }
+
+    public function testASeekOrARewindDropsTheFirstByteBound(): void
+    {
+        $memory = self::memory(self::BODY);
+        $stream = new DownloadStream(
+            Utils::streamFor($memory),
+            \strlen(self::BODY),
+            new FirstByteDeadline($memory, hrtime(true) + 5_000_000_000, 5.0),
+        );
+
+        $stream->seek(5);
+        self::assertSame(self::BODY, (string) $stream, 'a cast rewinds once the bound is dropped');
+        $stream->rewind();
+        self::assertSame(self::BODY, $stream->getContents());
+    }
+
+    /**
+     * @return resource
+     */
+    private static function memory(string $content)
+    {
+        $memory = fopen('php://memory', 'r+');
+        self::assertIsResource($memory);
+        fwrite($memory, $content);
+        rewind($memory);
+
+        return $memory;
+    }
+
+    private static function readWith(StreamInterface $stream, string $read): string
+    {
+        return match ($read) {
+            'getContents' => $stream->getContents(),
+            '__toString' => (string) $stream,
+            default => $stream->read(8192),
+        };
+    }
+
+    /** @var list<resource> */
+    private array $sockets = [];
+
+    protected function tearDown(): void
+    {
+        foreach ($this->sockets as $socket) {
+            if (\is_resource($socket)) {
+                fclose($socket);
+            }
+        }
+    }
+
+    /**
+     * @return array{resource, resource}
+     */
+    private function socketPair(): array
+    {
+        $domain = \DIRECTORY_SEPARATOR === '\\' ? STREAM_PF_INET : STREAM_PF_UNIX;
+        $pair = stream_socket_pair($domain, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
+        if ($pair === false) {
+            self::markTestSkipped('cannot create a socket pair');
+        }
+        array_push($this->sockets, ...$pair);
+
+        return [$pair[0], $pair[1]];
     }
 }

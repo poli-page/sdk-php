@@ -8,6 +8,8 @@ use PoliPage\PoliPageException;
 use Psr\Http\Client\ClientInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\StreamFactoryInterface;
+use Psr\Http\Message\StreamInterface;
 
 /**
  * Per-request transport options on top of a PSR-18 client: the per-attempt
@@ -29,7 +31,9 @@ use Psr\Http\Message\ResponseInterface;
  *
  * **Idle timeout.** The body of `render->pdfStream()` is read at the
  * caller's pace, so its download is bounded by an idle timeout instead of a
- * total: the wait for the first byte and each gap between two chunks.
+ * total: the wait for the first byte, then each gap between two chunks. The
+ * wait for the headers and the wait for the first byte of the body share
+ * one budget, from the start of the request ({@see FirstByteDeadline}).
  * Symfony gets `timeout` without `max_duration`. Guzzle gets `stream` (its
  * default handler stack then reads the body lazily, through its stream
  * handler) and `timeout`, the wait for the answer; Guzzle 8 also gets
@@ -78,6 +82,15 @@ final class TimeoutPolicy
 {
     private const TIMEOUT_PHRASES = ['timed out', 'timeout reached', 'max duration'];
 
+    /**
+     * Guzzle 8's `stream_factory` request option, by name: Guzzle 7's
+     * `RequestOptions` has no such constant.
+     */
+    private const GUZZLE_STREAM_FACTORY = 'stream_factory';
+
+    /** PSR-7 streams that hold a PHP stream resource and nothing else. */
+    private const PLAIN_STREAMS = ['GuzzleHttp\\Psr7\\Stream', 'Nyholm\\Psr7\\Stream'];
+
     /** The most `withOptions()` clones kept per Symfony client. */
     public const MAX_SYMFONY_CLONES = 16;
 
@@ -85,15 +98,19 @@ final class TimeoutPolicy
     private static ?\WeakMap $symfonyClones = null;
 
     /**
-     * @param bool $idle `$timeoutSeconds` is an idle timeout (the wait for the first byte and each
-     *                   gap between two chunks) instead of a bound on the whole exchange: for a
-     *                   body the caller streams
+     * @param bool                        $idle     `$timeoutSeconds` is an idle timeout (the wait for
+     *                                              the answer and each gap between two chunks)
+     *                                              instead of a bound on the whole exchange: for a
+     *                                              body the caller streams
+     * @param StreamResourceRecorder|null $recorder with `$idle`, gets the PHP stream under the body
+     *                                              from Guzzle 8 ({@see streamedBody()})
      */
     public static function send(
         ClientInterface $client,
         RequestInterface $request,
         ?float $timeoutSeconds,
         bool $idle = false,
+        ?StreamResourceRecorder $recorder = null,
     ): ResponseInterface {
         $freshConnection = $request->getMethod() === 'POST' && \defined('CURLOPT_FRESH_CONNECT');
         // A timeout of 0 or less: no SDK timeout. Guzzle reads 0 as none, and
@@ -119,6 +136,9 @@ final class TimeoutPolicy
                 // each read already.
                 if (self::guzzleMajorVersion() >= 8) {
                     $options[\GuzzleHttp\RequestOptions::READ_TIMEOUT] = $timeoutSeconds ?? 0;
+                    if ($recorder !== null) {
+                        $options[self::GUZZLE_STREAM_FACTORY] = $recorder->around(self::guzzleStreamFactory($client));
+                    }
                 }
             }
             if ($freshConnection) {
@@ -156,6 +176,53 @@ final class TimeoutPolicy
         }
 
         return $client->sendRequest($request);
+    }
+
+    /**
+     * The body of a streamed download, with the PHP stream resource under it
+     * when the client exposes one, so that {@see FirstByteDeadline} can bound
+     * the wait for its first byte: only for the clients the SDK applies its
+     * timeout to (Guzzle and Symfony).
+     *
+     * - Guzzle 8 gives it to the recorder passed to {@see send()}.
+     * - Guzzle 7 and Symfony's `Psr18Client` wrap it in a plain PSR-7 stream
+     *   (guzzlehttp/psr7's or nyholm/psr7's). The body is then rebuilt around
+     *   the same resource with `$streamFactory`, so nothing is read or lost.
+     *   A body these clients decorate (Guzzle 7's decoding of a compressed
+     *   answer, say) is left as it is: its first byte keeps the idle timeout.
+     *
+     * @return array{StreamInterface, resource|null}
+     */
+    public static function streamedBody(
+        ClientInterface $client,
+        StreamInterface $body,
+        StreamResourceRecorder $recorder,
+        StreamFactoryInterface $streamFactory,
+    ): array {
+        $recorded = $recorder->resource();
+        if (\is_resource($recorded)) {
+            return [$body, $recorded];
+        }
+        if (!self::appliesTimeout($client) || !\in_array($body::class, self::PLAIN_STREAMS, true)) {
+            return [$body, null];
+        }
+        $resource = $body->detach();
+        if (!\is_resource($resource)) {
+            return [$body, null];
+        }
+
+        return [$streamFactory->createStreamFromResource($resource), $resource];
+    }
+
+    /**
+     * Whether {@see send()} applies the timeout to this client: Guzzle and
+     * Symfony's `Psr18Client`. Any other PSR-18 client gets none from the SDK.
+     */
+    public static function appliesTimeout(ClientInterface $client): bool
+    {
+        return (class_exists(\GuzzleHttp\Client::class) && $client instanceof \GuzzleHttp\Client)
+            || (class_exists(\Symfony\Component\HttpClient\Psr18Client::class)
+                && $client instanceof \Symfony\Component\HttpClient\Psr18Client);
     }
 
     /**
@@ -262,6 +329,19 @@ final class TimeoutPolicy
         }
 
         return $clones;
+    }
+
+    /**
+     * The stream factory a Guzzle client builds its response bodies with:
+     * its own `stream_factory` option, else Guzzle's default.
+     */
+    private static function guzzleStreamFactory(\GuzzleHttp\Client $client): StreamFactoryInterface
+    {
+        $configured = self::hasMethod($client, 'getConfig')
+            ? $client->getConfig(self::GUZZLE_STREAM_FACTORY)
+            : null;
+
+        return $configured instanceof StreamFactoryInterface ? $configured : new \GuzzleHttp\Psr7\HttpFactory();
     }
 
     /**

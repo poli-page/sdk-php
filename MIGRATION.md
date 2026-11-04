@@ -5,6 +5,25 @@ The package follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
 before 1.0.0 a breaking change ships in a minor bump (0.9.x → 0.10.0), from
 1.0.0 on only in a major bump, and it always comes with an entry here.
 
+## From 0.13.0 to 0.13.1
+
+A patch: `renderToFile()` now follows the target rules of the other Poli
+Page SDKs. Two of them refuse targets 0.13.0 accepted, before any API call,
+with `io_error`:
+
+- an existing target that is not a regular file (a directory, a FIFO, a
+  socket, a device such as `/dev/stdout` when stdout is a pipe or a
+  terminal):
+  `Failed to write PDF: <path>: not a regular file`. To write the PDF to a
+  pipe or to stdout, copy `$client->render->pdfStream($input)` into it;
+- an existing target that is not writable (a read-only file), which 0.13.0
+  replaced. Make it writable first, or write elsewhere.
+
+The `io_error` message now names the path you passed:
+`Failed to write PDF: <path>: <reason>`. Code that parsed the old
+`Failed to write PDF: <PHP warning>` text should read `getPrevious()`, which
+still holds PHP's error.
+
 ## From 0.11.0 to 0.13.0
 
 The SDK now shares its major.minor with the Poli Page API, so there is no
