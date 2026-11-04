@@ -181,6 +181,34 @@ final class DownloadTimeoutTest extends TestCase
     }
 
     /**
+     * Headers that keep trickling in, each gap within the timeout, are a
+     * timeout. Symfony stops them once the budget is gone. Guzzle reads them
+     * inside PHP's HTTP stream wrapper, which bounds only each gap, so its
+     * timeout comes once they are complete (a documented exception).
+     */
+    #[DataProvider('httpClients')]
+    public function testPdfStreamHeadersThatKeepTricklingInAreATimeout(string $httpClient): void
+    {
+        $client = $this->clientFor($httpClient, [
+            [0, "HTTP/1.1 200 OK\r\n"],
+            [400, "x-a: 1\r\n"],
+            [400, "x-b: 1\r\n"],
+            [400, "x-c: 1\r\n"],
+            [400, "x-d: 1\r\n"],
+            [400, "x-e: 1\r\n"],
+            [400, "content-type: application/pdf\r\ncontent-length: 8\r\nconnection: close\r\n\r\n%PDF-1.7"],
+        ], self::FIRST_BYTE_TIMEOUT);
+
+        $startedAt = hrtime(true);
+        $error = self::downloadFailure(static fn () => self::readAll($client->render->pdfStream(self::input()), 'read'));
+
+        self::assertTimeoutFailure($error);
+        if ($httpClient === 'symfony') {
+            self::assertLessThan(2.0, self::secondsSince($startedAt), 'stopped before the headers are complete');
+        }
+    }
+
+    /**
      * Once the first byte is in, each gap gets the whole timeout again.
      */
     #[DataProvider('httpClientsAndReads')]

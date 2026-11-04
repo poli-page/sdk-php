@@ -16,7 +16,8 @@ rules as the other Poli Page SDKs. Still the Poli Page API contract v0.13.0.
 
 - **Breaking:** `renderToFile()` refuses, with `io_error` and before any API
   call, an existing target that is not a regular file (a directory, a FIFO,
-  a socket, a device such as `/dev/stdout`), with the message
+  a socket, a device such as `/dev/stdout` when stdout is a pipe or a
+  terminal), with the message
   `Failed to write PDF: <path>: not a regular file`. 0.13.0 rendered first,
   then replaced a FIFO or a device with a regular file, or failed on a
   directory after the render. To write the PDF to a pipe or to stdout, copy
@@ -45,10 +46,15 @@ rules as the other Poli Page SDKs. Still the Poli Page API contract v0.13.0.
   from the start of the download request; after that, the timeout bounds
   each gap between two chunks, as before. 0.13.0 gave each of the two first
   waits a whole timeout of its own. This applies with Guzzle and Symfony
-  HTTP Client. Two cases keep a whole timeout for the first byte: a body
-  Guzzle 7 decodes (a compressed answer), and a Symfony `Psr18Client` whose
-  PSR-7 streams come from another library than guzzlehttp/psr7 or
-  nyholm/psr7.
+  HTTP Client, with three exceptions:
+  - with Guzzle, response headers that trickle in, each gap within the
+    timeout, are reported as a timeout only once they are complete: Guzzle
+    reads them inside PHP's HTTP stream wrapper, which bounds only each gap
+    and offers no hook to stop it earlier. Symfony HTTP Client stops them
+    once the budget is gone;
+  - a body Guzzle 7 decodes (a compressed answer) and a Symfony
+    `Psr18Client` whose PSR-7 streams come from another library than
+    guzzlehttp/psr7 or nyholm/psr7 keep a whole timeout for the first byte.
 
 ## [0.13.0] - 2026-11-02
 

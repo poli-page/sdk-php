@@ -212,6 +212,13 @@ final class PoliPage implements Transport
      * the request: answers that take the whole budget before their headers
      * are a timeout here, and the first read waits only for what is left
      * ({@see FirstByteDeadline}).
+     *
+     * Why the header check comes only once `send()` returns: Guzzle's
+     * stream handler reads the headers inside `fopen()` of PHP's HTTP
+     * wrapper, which bounds each gap between two packets and calls back only
+     * on a few headers (`content-type`, `content-length`), so headers that
+     * trickle in cannot be stopped earlier. Symfony HTTP Client stops them
+     * itself once the timeout has passed before they are complete.
      */
     public function streamBytes(string $url, ?float $timeout): StreamInterface
     {

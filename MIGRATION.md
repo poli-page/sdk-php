@@ -12,7 +12,8 @@ Page SDKs. Two of them refuse targets 0.13.0 accepted, before any API call,
 with `io_error`:
 
 - an existing target that is not a regular file (a directory, a FIFO, a
-  socket, a device such as `/dev/stdout`):
+  socket, a device such as `/dev/stdout` when stdout is a pipe or a
+  terminal):
   `Failed to write PDF: <path>: not a regular file`. To write the PDF to a
   pipe or to stdout, copy `$client->render->pdfStream($input)` into it;
 - an existing target that is not writable (a read-only file), which 0.13.0

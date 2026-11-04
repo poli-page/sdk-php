@@ -7,7 +7,7 @@ This page tracks breaking changes between versions of `poli-page/sdk`. For the f
 
 ## From 0.13.0 to 0.13.1
 
-`renderToFile()` now refuses, before any API call and with `io_error`, an existing target that is not a regular file (`Failed to write PDF: <path>: not a regular file`: a directory, FIFO, socket or device such as `/dev/stdout`) or not writable (a read-only file, which 0.13.0 replaced). To write the PDF to a pipe or to stdout, copy `render->pdfStream()` into it. The `io_error` message now names the path you passed: `Failed to write PDF: <path>: <reason>`; PHP's error is still `getPrevious()`.
+`renderToFile()` now refuses, before any API call and with `io_error`, an existing target that is not a regular file (`Failed to write PDF: <path>: not a regular file`: a directory, FIFO, socket or device such as `/dev/stdout` when stdout is a pipe or a terminal) or not writable (a read-only file, which 0.13.0 replaced). To write the PDF to a pipe or to stdout, copy `render->pdfStream()` into it. The `io_error` message now names the path you passed: `Failed to write PDF: <path>: <reason>`; PHP's error is still `getPrevious()`.
 
 ## From 0.11.0 to 0.13.0
 

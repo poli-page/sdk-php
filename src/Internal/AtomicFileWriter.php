@@ -61,9 +61,10 @@ final class AtomicFileWriter
      *
      * Two targets are refused, judged from the file's attributes without
      * opening it (opening a FIFO would block): one that exists but is not a
-     * regular file (a directory, a FIFO, a device such as `/dev/stdout`, a
-     * socket), which the rename would replace with a regular file, and one
-     * that is not writable, which the rename could replace even so.
+     * regular file (a directory, a FIFO, a socket, a device such as
+     * `/dev/stdout` when stdout is a pipe or a terminal), which the rename
+     * would replace with a regular file, and one that is not writable, which
+     * the rename could replace even so.
      *
      * @throws PoliPageException with code IO_ERROR
      */

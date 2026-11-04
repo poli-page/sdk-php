@@ -171,15 +171,15 @@ final class DownloadStream implements StreamInterface
 
     public function seek(int $offset, int $whence = SEEK_SET): void
     {
-        $this->firstByte = null;
         $this->stream->seek($offset, $whence);
+        $this->firstByte = null;
         $this->received = $this->stream->tell();
     }
 
     public function rewind(): void
     {
-        $this->firstByte = null;
         $this->stream->rewind();
+        $this->firstByte = null;
         $this->received = 0;
     }
 

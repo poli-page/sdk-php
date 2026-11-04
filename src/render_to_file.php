@@ -25,9 +25,9 @@ use PoliPage\Internal\Http\DownloadStream;
  * with a new file, its owner and group become those of the calling process,
  * and its other hard links keep the old content. An existing target that is
  * not writable (a read-only file) or not a regular file (a directory, FIFO,
- * socket or device such as `/dev/stdout`) is refused before any API call. To
- * write the PDF to a pipe or to stdout, copy `$client->render->pdfStream()`
- * into it instead.
+ * socket or device such as `/dev/stdout` when stdout is a pipe or a
+ * terminal) is refused before any API call. To write the PDF to a pipe or to
+ * stdout, copy `$client->render->pdfStream()` into it instead.
  *
  * Free function rather than a method so callers can use it without
  * importing a `Node`-specific helper class — matches the `renderToFile`
