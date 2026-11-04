@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace PoliPage\Tests\Unit\Internal\Http;
 
+use GuzzleHttp\Client as GuzzleClient;
 use Http\Mock\Client as MockClient;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use PoliPage\Internal\Http\StreamResourceRecorder;
 use PoliPage\Internal\Http\TimeoutPolicy;
+use PoliPage\Tests\Support\FailingStream;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Message\RequestInterface;
+use Symfony\Component\HttpClient\Psr18Client;
 
 #[CoversClass(TimeoutPolicy::class)]
 final class TimeoutPolicyTest extends TestCase
@@ -125,5 +129,59 @@ final class TimeoutPolicyTest extends TestCase
     public function testIsTimeoutIgnoresAHostNamedTimeout(): void
     {
         self::assertFalse(TimeoutPolicy::isTimeout(new \RuntimeException('Could not resolve host: timeout.example.com')));
+    }
+
+    public function testStreamedBodyKeepsTheRecordedResourceAndTheBody(): void
+    {
+        $factory = new Psr17Factory();
+        $recorder = (new StreamResourceRecorder())->around($factory);
+        $body = $recorder->createStreamFromResource(self::memory('pdf'));
+
+        [$streamed, $resource] = TimeoutPolicy::streamedBody(new GuzzleClient(), $body, $recorder, $factory);
+
+        self::assertSame($body, $streamed);
+        self::assertSame($recorder->resource(), $resource);
+    }
+
+    public function testStreamedBodyRebuildsAPlainBodyOfGuzzleOrSymfonyAroundItsResource(): void
+    {
+        $factory = new Psr17Factory();
+        foreach ([new GuzzleClient(), new Psr18Client()] as $client) {
+            $memory = self::memory('pdf');
+            $body = $factory->createStreamFromResource($memory);
+
+            [$streamed, $resource] = TimeoutPolicy::streamedBody($client, $body, new StreamResourceRecorder(), $factory);
+
+            self::assertSame($memory, $resource);
+            self::assertNotSame($body, $streamed);
+            self::assertSame('pdf', (string) $streamed, 'nothing read or lost');
+        }
+    }
+
+    public function testStreamedBodyLeavesOtherClientsAndDecoratedBodiesAlone(): void
+    {
+        $factory = new Psr17Factory();
+        $plain = $factory->createStreamFromResource(self::memory('pdf'));
+        [$streamed, $resource] = TimeoutPolicy::streamedBody(new MockClient(), $plain, new StreamResourceRecorder(), $factory);
+        self::assertSame($plain, $streamed);
+        self::assertNull($resource);
+
+        $decorated = new FailingStream('pdf', new \RuntimeException('x'));
+        [$streamed, $resource] = TimeoutPolicy::streamedBody(new GuzzleClient(), $decorated, new StreamResourceRecorder(), $factory);
+        self::assertSame($decorated, $streamed);
+        self::assertNull($resource);
+    }
+
+    /**
+     * @return resource
+     */
+    private static function memory(string $content)
+    {
+        $memory = fopen('php://memory', 'r+');
+        self::assertIsResource($memory);
+        fwrite($memory, $content);
+        rewind($memory);
+
+        return $memory;
     }
 }

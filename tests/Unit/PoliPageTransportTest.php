@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace PoliPage\Tests\Unit;
 
+use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response as GuzzleResponse;
 use Http\Mock\Client as MockClient;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -183,5 +187,57 @@ final class PoliPageTransportTest extends TestCase
             self::assertSame(503, $e->status);
             self::assertCount(3, $mock->getRequests());
         }
+    }
+
+    /**
+     * `pdfStream()` with Guzzle: an answer that took the whole `timeout`
+     * before its headers is a timeout, the first byte having no time left.
+     */
+    public function testPdfStreamAnswerThatTookTheWholeTimeoutIsATimeout(): void
+    {
+        $client = self::guzzleClient(static function (): GuzzleResponse {
+            usleep(300_000);
+
+            return new GuzzleResponse(200, ['content-length' => '8'], '%PDF-1.7');
+        });
+
+        try {
+            $client->render->pdfStream(new RenderInput(project: 'billing', template: 'invoice', data: []));
+            self::fail('Expected DOWNLOAD_FAILED');
+        } catch (PoliPageException $e) {
+            self::assertSame(PoliPageException::DOWNLOAD_FAILED, $e->errorCode);
+            self::assertSame('Failed to download PDF: timeout', $e->getMessage());
+            self::assertNull($e->status);
+        }
+    }
+
+    public function testPdfStreamAnswerWithinTheTimeoutIsRead(): void
+    {
+        $client = self::guzzleClient(static fn (): GuzzleResponse => new GuzzleResponse(200, ['content-length' => '8'], '%PDF-1.7'));
+
+        $stream = $client->render->pdfStream(new RenderInput(project: 'billing', template: 'invoice', data: []));
+
+        self::assertSame('%PDF-1.7', $stream->getContents());
+    }
+
+    /**
+     * A Guzzle client (one the SDK applies its timeout to) whose first answer
+     * is the render descriptor, the second `$download`.
+     *
+     * @param \Closure(): GuzzleResponse $download
+     */
+    private static function guzzleClient(\Closure $download): PoliPage
+    {
+        $handler = new MockHandler([
+            new GuzzleResponse(200, ['content-type' => 'application/json'], DocumentWire::descriptorJson()),
+            $download,
+        ]);
+
+        return new PoliPage(
+            apiKey: 'pp_sandbox_x',
+            maxRetries: 0,
+            timeout: 0.2,
+            httpClient: new GuzzleClient(['handler' => HandlerStack::create($handler)]),
+        );
     }
 }
