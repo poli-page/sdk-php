@@ -428,7 +428,7 @@ function sdkInternalErrors(): array
         ['code' => 'unknown_error',   'when' => 'A catch-all for unexpected failures.'],
         ['code' => 'DOWNLOAD_FAILED', 'when' => 'The presigned PDF download failed: `Failed to download PDF: HTTP <status>` with the storage `status`; `Failed to download PDF: timeout` without one when it outlasted `timeout` (the whole download, or for `render->pdfStream()` the wait for the first byte or a gap between two chunks); `Failed to download PDF: network error` without one otherwise (no answer, or a connection dropped mid-body). Never retryable, whatever the storage status.'],
         ['code' => 'invalid_response', 'when' => 'A 2xx answer whose body is not JSON, from a method that expects JSON (`Invalid response: HTTP <status> body is not JSON`, the real 2xx as `status`). Raised as `InvalidResponseException`; `toPayload()` answers 502 for it. Not retryable.'],
-        ['code' => 'io_error',        'when' => '`renderToFile()` could not write the file (`Failed to write PDF: <reason>`, no status, PHP\'s error as `getPrevious()`); the target file is left untouched. Not retryable.'],
+        ['code' => 'io_error',        'when' => '`renderToFile()` could not write the file (`Failed to write PDF: <path>: <reason>`, no status, PHP\'s error as `getPrevious()`), or the target is not a regular file or not writable (refused before any API call); the target file is left untouched. Not retryable.'],
         ['code' => 'INTERNAL_ERROR',  'when' => 'The API answered 5xx, its error body was not JSON or could not be read (`HTTP <status>`, real status kept), or its response had an unexpected shape. Retryable on 5xx and 429.'],
     ];
 }

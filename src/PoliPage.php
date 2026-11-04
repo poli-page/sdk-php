@@ -16,9 +16,11 @@ use PoliPage\Internal\Http\Backoff;
 use PoliPage\Internal\Http\BodyReader;
 use PoliPage\Internal\Http\DownloadStream;
 use PoliPage\Internal\Http\ErrorBodyParser;
+use PoliPage\Internal\Http\FirstByteDeadline;
 use PoliPage\Internal\Http\Headers;
 use PoliPage\Internal\Http\RetryAfterParser;
 use PoliPage\Internal\Http\SendOnceResult;
+use PoliPage\Internal\Http\StreamResourceRecorder;
 use PoliPage\Internal\Http\TextResponse;
 use PoliPage\Internal\Http\TimeoutPolicy;
 use PoliPage\Internal\Http\UrlBuilder;
@@ -203,13 +205,40 @@ final class PoliPage implements Transport
         return $body;
     }
 
+    /**
+     * The body of the download, read at the caller's pace. Its `timeout` is
+     * an idle timeout, except that the wait for the answer's headers and the
+     * wait for the first byte of its body share one budget, from the start of
+     * the request: answers that take the whole budget before their headers
+     * are a timeout here, and the first read waits only for what is left
+     * ({@see FirstByteDeadline}).
+     */
     public function streamBytes(string $url, ?float $timeout): StreamInterface
     {
-        $response = $this->sendUnauthenticatedGet($url, $timeout ?? $this->defaultTimeout, idle: true);
+        $timeout ??= $this->defaultTimeout;
+        $startedAt = hrtime(true);
+        $recorder = new StreamResourceRecorder();
+        $response = $this->sendUnauthenticatedGet($url, $timeout, idle: true, recorder: $recorder);
+        [$body, $resource] = TimeoutPolicy::streamedBody($this->httpClient, $response->getBody(), $recorder, $this->streamFactory);
+
+        $firstByte = null;
+        if ($timeout > 0 && TimeoutPolicy::appliesTimeout($this->httpClient)) {
+            $deadlineNs = $startedAt + (int) round($timeout * 1e9);
+            if (hrtime(true) >= $deadlineNs) {
+                $body->close();
+                throw DownloadStream::failure(
+                    new \RuntimeException('The PDF download took its whole timeout before its first byte'),
+                    timedOut: true,
+                );
+            }
+            if ($resource !== null) {
+                $firstByte = new FirstByteDeadline($resource, $deadlineNs, $timeout);
+            }
+        }
 
         // A failure while the caller reads it is DOWNLOAD_FAILED, and so is a
         // body that ends short of its announced Content-Length.
-        return new DownloadStream($response->getBody(), DownloadStream::expectedLength($response));
+        return new DownloadStream($body, DownloadStream::expectedLength($response), $firstByte);
     }
 
     /**
@@ -228,12 +257,16 @@ final class PoliPage implements Transport
      * `previous`) when no answer came, with the timeout message when the
      * timeout elapsed.
      */
-    private function sendUnauthenticatedGet(string $url, float $timeout, bool $idle): ResponseInterface
-    {
+    private function sendUnauthenticatedGet(
+        string $url,
+        float $timeout,
+        bool $idle,
+        ?StreamResourceRecorder $recorder = null,
+    ): ResponseInterface {
         $request = $this->requestFactory->createRequest('GET', $url);
         $startedAt = hrtime(true);
         try {
-            $response = TimeoutPolicy::send($this->httpClient, $request, $timeout, $idle);
+            $response = TimeoutPolicy::send($this->httpClient, $request, $timeout, $idle, $recorder);
         } catch (ClientExceptionInterface $e) {
             // The HTTP library's own report comes first (DownloadStream::failure).
             // Why the clock as well: PHP's HTTP stream wrapper, under Guzzle's

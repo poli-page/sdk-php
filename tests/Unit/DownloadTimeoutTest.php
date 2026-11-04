@@ -16,13 +16,15 @@ use PoliPage\RenderInput;
 use PoliPage\Tests\Support\DocumentWire;
 use PoliPage\Tests\Support\TrickleServer;
 use Psr\Http\Client\ClientInterface;
+use Psr\Http\Message\StreamInterface;
 use Symfony\Component\HttpClient\Psr18Client;
 
 /**
  * The presigned-URL download is bounded by the SDK's `timeout`, through
  * clients built with no timeout of their own: as a whole for `render->pdf()`
  * and `downloadPdf()`, as an idle timeout (the wait for the first byte and
- * each gap between two chunks) for `render->pdfStream()`. Past it, the error
+ * each gap between two chunks) for `render->pdfStream()`, where the wait for
+ * the headers and the wait for the first byte share one budget. Past it, the error
  * is DOWNLOAD_FAILED without a status, with the timeout message, and is not
  * retryable.
  *
@@ -33,6 +35,9 @@ use Symfony\Component\HttpClient\Psr18Client;
 final class DownloadTimeoutTest extends TestCase
 {
     private const TIMEOUT = 0.5;
+
+    /** For the first-byte budget: delays of 300 ms or more stay clear of it on a busy runner. */
+    private const FIRST_BYTE_TIMEOUT = 1.0;
 
     /** Ten chunks 100 ms apart: each gap well under the timeout, the whole twice over it. */
     private const TRICKLE_CHUNKS = 10;
@@ -132,6 +137,92 @@ final class DownloadTimeoutTest extends TestCase
         self::assertLessThan(3.0, self::secondsSince($startedAt));
     }
 
+    /**
+     * The headers and the first byte of the body, each within the timeout
+     * but not both: the two waits share one budget.
+     */
+    #[DataProvider('httpClientsAndReads')]
+    public function testPdfStreamHeadersAndFirstByteShareOneBudget(string $httpClient, string $read): void
+    {
+        $client = $this->clientFor(
+            $httpClient,
+            TrickleServer::pdf(600, [[600, '%PDF-1.7'], [0, ' rest']]),
+            self::FIRST_BYTE_TIMEOUT,
+        );
+
+        $startedAt = hrtime(true);
+        $error = self::downloadFailure(static fn () => self::readAll($client->render->pdfStream(self::input()), $read));
+
+        self::assertTimeoutFailure($error);
+        self::assertLessThan(3.0, self::secondsSince($startedAt));
+    }
+
+    /**
+     * Headers that trickle in, each gap within the timeout, but complete
+     * only once the whole budget is gone.
+     */
+    #[DataProvider('httpClients')]
+    public function testPdfStreamTimesOutWhenTheHeadersTakeTheWholeBudget(string $httpClient): void
+    {
+        $client = $this->clientFor($httpClient, [
+            [400, "HTTP/1.1 200 OK\r\n"],
+            [400, "content-type: application/pdf\r\n"],
+            [400, "content-length: 8\r\nconnection: close\r\n\r\n%PDF-1.7"],
+        ], self::FIRST_BYTE_TIMEOUT);
+
+        $error = self::downloadFailure(static function () use ($client): void {
+            $stream = $client->render->pdfStream(self::input());
+            while (!$stream->eof()) {
+                $stream->read(8192);
+            }
+        });
+
+        self::assertTimeoutFailure($error);
+    }
+
+    /**
+     * Once the first byte is in, each gap gets the whole timeout again.
+     */
+    #[DataProvider('httpClientsAndReads')]
+    public function testPdfStreamGapsAfterTheFirstByteGetTheIdleTimeout(string $httpClient, string $read): void
+    {
+        $client = $this->clientFor(
+            $httpClient,
+            TrickleServer::pdf(300, [[300, '%PDF-1.7'], [700, ' second'], [700, ' third']]),
+            self::FIRST_BYTE_TIMEOUT,
+        );
+
+        self::assertSame('%PDF-1.7 second third', self::readAll($client->render->pdfStream(self::input()), $read));
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function httpClientsAndReads(): iterable
+    {
+        foreach (['guzzle', 'symfony'] as $httpClient) {
+            foreach (['read', 'getContents', '__toString'] as $read) {
+                yield $httpClient . ' ' . $read => [$httpClient, $read];
+            }
+        }
+    }
+
+    private static function readAll(StreamInterface $stream, string $read): string
+    {
+        if ($read === 'getContents') {
+            return $stream->getContents();
+        }
+        if ($read === '__toString') {
+            return (string) $stream;
+        }
+        $bytes = '';
+        while (!$stream->eof()) {
+            $bytes .= $stream->read(8192);
+        }
+
+        return $bytes;
+    }
+
     #[DataProvider('httpClients')]
     public function testPdfStreamFailsWhenTheBodyStallsMidway(string $httpClient): void
     {
@@ -176,7 +267,7 @@ final class DownloadTimeoutTest extends TestCase
      *
      * @param list<array{int, string}> $download
      */
-    private function clientFor(string $httpClient, array $download): PoliPage
+    private function clientFor(string $httpClient, array $download, float $timeout = self::TIMEOUT): PoliPage
     {
         $this->server = new TrickleServer([
             TrickleServer::json(DocumentWire::descriptorJson(['presignedPdfUrl' => '{{origin}}/doc.pdf'])),
@@ -187,7 +278,7 @@ final class DownloadTimeoutTest extends TestCase
             apiKey: 'pp_sandbox_x',
             baseUrl: $this->server->origin,
             maxRetries: 2,
-            timeout: self::TIMEOUT,
+            timeout: $timeout,
             httpClient: self::httpClient($httpClient),
         );
     }

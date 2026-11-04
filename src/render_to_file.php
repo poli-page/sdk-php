@@ -15,9 +15,19 @@ use PoliPage\Internal\Http\DownloadStream;
  * The bytes go to a temporary file in the same directory, renamed over
  * `$path` only once the PDF is complete: when anything fails, `$path` is left
  * untouched (an existing file keeps its content, a missing one is not
- * created) and the temporary file is removed. The directory and the
- * temporary file are prepared before the render, so a path that cannot be
- * written costs no render.
+ * created) and the temporary file is removed. The target and its directory
+ * are checked, and the temporary file created, before the render, so a path
+ * that cannot be written costs no render.
+ *
+ * When `$path` is a symbolic link (or a chain of them), the file it points to
+ * is written and the link stays a link. An existing target keeps its
+ * permission bits, without setuid, setgid or sticky; as the PDF replaces it
+ * with a new file, its owner and group become those of the calling process,
+ * and its other hard links keep the old content. An existing target that is
+ * not writable (a read-only file) or not a regular file (a directory, FIFO,
+ * socket or device such as `/dev/stdout`) is refused before any API call. To
+ * write the PDF to a pipe or to stdout, copy `$client->render->pdfStream()`
+ * into it instead.
  *
  * Free function rather than a method so callers can use it without
  * importing a `Node`-specific helper class — matches the `renderToFile`
@@ -40,10 +50,13 @@ use PoliPage\Internal\Http\DownloadStream;
  * ```
  *
  * @throws PoliPageException with code IO_ERROR (`io_error`) when the file cannot be written:
- *                                   creating a parent directory, opening, writing or renaming it
- *                                   into place. No status, the message
- *                                   `Failed to write PDF: <reason>` with PHP's own error text,
- *                                   and that error as `getPrevious()`. Never retried
+ *                                   the target is not writable or not a regular file, or creating
+ *                                   a parent directory, opening, writing or renaming it into place
+ *                                   fails. No status, the message
+ *                                   `Failed to write PDF: <path>: <reason>` (`$path` as passed,
+ *                                   never the temporary file; the system's own reason, or
+ *                                   `not a regular file`), and PHP's error as `getPrevious()`.
+ *                                   Never retried
  * @throws PoliPageException any failure mode of `$client->render->pdfStream($input)` propagates
  */
 function renderToFile(PoliPage $client, RenderInput $input, string $path): void
