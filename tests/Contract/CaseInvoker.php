@@ -41,6 +41,13 @@ final class CaseInvoker
     /** @var list<array<string, int|string>> */
     public array $events = [];
 
+    /**
+     * How long the call took, on the monotonic clock, in whole milliseconds
+     * (N-DURATION-MS): from just before `call.method` to its return or throw
+     * (for `render.pdfStream`, to the end of the stream), null until then.
+     */
+    public ?int $callMs = null;
+
     private int $retries = 0;
 
     public function __construct(private readonly ContractCase $case, private readonly string $origin)
@@ -86,7 +93,12 @@ final class CaseInvoker
                 onRequest: $this->onRequest(...),
                 onRetry: $this->onRetry(...),
             );
-            $value = $this->invoke($client);
+            $startNs = hrtime(true);
+            try {
+                $value = $this->invoke($client);
+            } finally {
+                $this->callMs = (int) round((hrtime(true) - $startNs) / 1_000_000);
+            }
         } catch (ContractException $e) {
             throw $e;
         } catch (PoliPageException $e) {

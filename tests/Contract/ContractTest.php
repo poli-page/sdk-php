@@ -236,6 +236,14 @@ final class ContractTest extends TestCase
             self::canonical($this->describeEvents($invoker->events, $events)),
             'onRequest / onRetry events',
         );
+        if ($case->minCallMs !== null && $invoker->callMs !== null) {
+            // N-DURATION-MS: compared in whole milliseconds, like a gap.
+            self::assertSame(
+                ['minCallMs' => $case->minCallMs],
+                ['minCallMs' => $invoker->callMs >= $case->minCallMs ? $case->minCallMs : sprintf('only %d ms', $invoker->callMs)],
+                'call duration',
+            );
+        }
         if ($checkResult) {
             self::assertSame(
                 self::canonical(Placeholders::substitute($case->expectedResult(), $mock)),
