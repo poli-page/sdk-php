@@ -226,7 +226,12 @@ jobs:
             "poli-page/sdk:*@dev" \
             "symfony/http-client:^7.0" \
             "nyholm/psr7:^1.8"
-          php -r 'require "vendor/autoload.php";
-            $c = PoliPage\PoliPage::client("pp_test_smoke");
-            if (!$c instanceof PoliPage\PoliPage) { fwrite(STDERR, "smoke failed\n"); exit(1); }
-            echo "smoke: PoliPage\\PoliPage class autoloads + constructs OK\n";'
+          # Quoted heredoc: the PHP source reaches the file untouched by the shell.
+          cat > smoke.php <<'PHP'
+          <?php
+          require "vendor/autoload.php";
+          $c = PoliPage\PoliPage::client("pp_test_smoke");
+          if (!$c instanceof PoliPage\PoliPage) { fwrite(STDERR, "smoke failed\n"); exit(1); }
+          echo "smoke: PoliPage\\PoliPage class autoloads + constructs OK\n";
+          PHP
+          php smoke.php
