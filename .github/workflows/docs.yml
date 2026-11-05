@@ -18,7 +18,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
 
 # Pages is single-tenant per repo: serialise deploys instead of cancelling,
 # so a release-triggered build can't be killed by a follow-up doc push.
