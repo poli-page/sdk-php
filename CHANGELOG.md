@@ -30,6 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   alike. Before, PHP wrapped it when it turned it into whole milliseconds or
   nanoseconds: with Guzzle the call failed at once with `network_error`, and
   with Symfony some of these values timed out at once.
+- `data` and `metadata` are now always sent as JSON objects, as the API
+  contract types them. An empty one (`data: []`) went out as the JSON array
+  `[]` and now goes out as `{}`. One whose keys run 0..n-1 (such as
+  `['0' => 'a', '1' => 'b']`, which PHP stores as a list) went out as
+  `["a","b"]` and now goes out as `{"0":"a","1":"b"}`. Values inside `data`
+  are sent unchanged: pass `new \stdClass()` or an object for a nested map
+  that is empty or keyed 0..n-1 (#32).
 
 ## [0.13.1] - 2026-11-04
 
