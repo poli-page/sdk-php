@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   arms what is left of its budget rounded up to a whole millisecond (PHP waits
   on a socket for whole milliseconds, so it could end up to 1 ms early), and
   a wait that still ends before the deadline waits again for the rest.
+- A `timeout` that is not a finite number of seconds up to 1e9 (about 31
+  years), such as `INF`, `NAN` or `1e16`, sets no timeout, as 0 does: your
+  HTTP client's own default applies, with Guzzle and Symfony HTTP Client
+  alike. Before, PHP wrapped it when it turned it into whole milliseconds or
+  nanoseconds: with Guzzle the call failed at once with `network_error`, and
+  with Symfony some of these values timed out at once.
 
 ## [0.13.1] - 2026-11-04
 

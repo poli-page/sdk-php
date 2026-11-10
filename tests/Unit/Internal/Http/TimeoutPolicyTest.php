@@ -265,6 +265,69 @@ final class TimeoutPolicyTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{float|null}>
+     */
+    public static function noTimeouts(): iterable
+    {
+        yield 'INF' => [INF];
+        yield '-INF' => [-INF];
+        yield 'NAN' => [NAN];
+        yield '1e16 s' => [1e16];
+        yield 'just over MAX_SECONDS' => [TimeoutPolicy::MAX_SECONDS * 1.000001];
+        yield '0' => [0.0];
+        yield '-1 s' => [-1.0];
+        yield 'null' => [null];
+    }
+
+    /**
+     * Such a timeout has no whole milliseconds an int holds: no timeout, as 0
+     * is, never a wrapped one (INF used to arm half a millisecond).
+     */
+    #[DataProvider('noTimeouts')]
+    public function testATimeoutWithNoWholeMillisecondsIsNoTimeout(?float $timeout): void
+    {
+        self::assertNull(TimeoutPolicy::effective($timeout));
+
+        $handler = new MockHandler([new Response(200), new Response(200)]);
+        $guzzle = new GuzzleClient(['handler' => HandlerStack::create($handler)]);
+        $request = (new Psr17Factory())->createRequest('GET', 'https://example.test/x');
+        foreach ([false, true] as $idle) {
+            TimeoutPolicy::send($guzzle, $request, $timeout, idle: $idle);
+            $options = $handler->getLastOptions();
+            self::assertSame(0, $options['timeout'] ?? null, 'Guzzle reads 0 as no timeout');
+        }
+
+        /** @var list<array<mixed>> $sent */
+        $sent = [];
+        $symfony = new Psr18Client(new MockHttpClient(static function (string $method, string $url, array $options) use (&$sent): MockResponse {
+            $sent[] = $options;
+
+            return new MockResponse('', ['http_code' => 200]);
+        }));
+        TimeoutPolicy::send($symfony, $request, $timeout);
+        // Symfony's own defaults: no total, PHP's default_socket_timeout idle.
+        self::assertEquals(0, $sent[0]['max_duration'] ?? null);
+        self::assertEquals((float) ini_get('default_socket_timeout'), $sent[0]['timeout'] ?? null);
+    }
+
+    public function testEffectiveKeepsAFiniteTimeoutUpToMaxSeconds(): void
+    {
+        self::assertSame(0.000001, TimeoutPolicy::effective(0.000001));
+        self::assertSame(1.003, TimeoutPolicy::effective(1.003));
+        self::assertSame(TimeoutPolicy::MAX_SECONDS, TimeoutPolicy::effective(TimeoutPolicy::MAX_SECONDS));
+        self::assertSame(1_000_000_000_000, TimeoutPolicy::wholeMilliseconds(TimeoutPolicy::MAX_SECONDS));
+    }
+
+    public function testMessageMillisecondsNeverWraps(): void
+    {
+        self::assertSame('1003', TimeoutPolicy::messageMilliseconds(1.003));
+        self::assertSame('0', TimeoutPolicy::messageMilliseconds(0.0));
+        self::assertSame('INF', TimeoutPolicy::messageMilliseconds(INF));
+        self::assertSame('NAN', TimeoutPolicy::messageMilliseconds(NAN));
+        self::assertSame('1.0E+19', TimeoutPolicy::messageMilliseconds(1e16));
+    }
+
+    /**
      * The whole milliseconds a client that drops the fraction arms.
      */
     private static function truncatedMs(mixed $seconds): int

@@ -143,7 +143,10 @@ final class DownloadTimeoutTest extends TestCase
      * whole milliseconds and drops the rest, so a time left of 99.6 ms armed
      * as is used to end the wait after 99 ms. A timeout with a fraction of a
      * millisecond, ten times over, since the fraction left at the first
-     * read varies with the time the headers took.
+     * read varies with the time the headers took. Timing based: with the
+     * fix reverted it fails on some runs only (the scheduler often wakes
+     * the read late enough); FirstByteDeadlineTest and DownloadStreamTest
+     * catch a revert on every run.
      */
     #[DataProvider('httpClients')]
     public function testPdfStreamFirstByteTimeoutNeverEndsBeforeItsBound(string $httpClient): void
@@ -166,6 +169,19 @@ final class DownloadTimeoutTest extends TestCase
                 sprintf('the %.1f ms timeout ended after %.3f ms', $timeout * 1000, $elapsedNs / 1e6),
             );
         }
+    }
+
+    /**
+     * A timeout that is not a finite number of seconds up to
+     * TimeoutPolicy::MAX_SECONDS is no timeout for the download either: no
+     * first-byte deadline wrapped out of its nanoseconds.
+     */
+    #[DataProvider('httpClients')]
+    public function testPdfStreamWithAnInfiniteTimeoutHasNoTimeout(string $httpClient): void
+    {
+        $client = $this->clientFor($httpClient, TrickleServer::pdf(300, [[300, '%PDF-1.7']]), INF);
+
+        self::assertSame('%PDF-1.7', self::readAll($client->render->pdfStream(self::input()), 'read'));
     }
 
     /**
