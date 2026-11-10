@@ -219,7 +219,7 @@ final class DownloadStream implements StreamInterface
         }
         $firstByte->arm();
         try {
-            $bytes = $this->guarded($toTheEnd ? fn (): string => $this->stream->read(self::FIRST_READ) : $read, false);
+            $bytes = $this->guarded($toTheEnd ? fn (): string => $this->stream->read(self::FIRST_READ) : $read, false, $firstByte);
         } finally {
             $firstByte->disarm();
         }
@@ -242,25 +242,38 @@ final class DownloadStream implements StreamInterface
      * Windows a read can set it although it returned bytes); the next one
      * comes back empty if the timeout really elapsed.
      *
+     * With `$firstByte`, a read that timed out before its deadline (the wait
+     * woke early) reads again for what is left ({@see FirstByteDeadline::rearm()}):
+     * the timeout never ends before its bound.
+     *
      * @param \Closure(): string $read
      * @param bool               $toTheEnd `$read` reads to the end of the body
      */
-    private function guarded(\Closure $read, bool $toTheEnd): string
+    private function guarded(\Closure $read, bool $toTheEnd, ?FirstByteDeadline $firstByte = null): string
     {
-        try {
-            $bytes = BodyReader::guard($read);
-        } catch (\Exception $e) {
-            throw self::failure($e, $this->timedOut());
-        }
-        if (($toTheEnd || $bytes === '') && !$this->stream->eof() && $this->timedOut()) {
-            throw self::failure(new \RuntimeException('Reading the PDF download timed out'), true);
-        }
-        $this->received += \strlen($bytes);
-        if ($this->stream->eof()) {
-            self::assertComplete($this->received, $this->expectedLength);
-        }
+        while (true) {
+            try {
+                $bytes = BodyReader::guard($read);
+            } catch (\Exception $e) {
+                // Symfony's stream reports its timeout through the error alone.
+                if (($this->timedOut() || TimeoutPolicy::isTimeout($e)) && $firstByte?->rearm() === true) {
+                    continue;
+                }
+                throw self::failure($e, $this->timedOut());
+            }
+            if (($toTheEnd || $bytes === '') && !$this->stream->eof() && $this->timedOut()) {
+                if ($bytes === '' && $firstByte?->rearm() === true) {
+                    continue;
+                }
+                throw self::failure(new \RuntimeException('Reading the PDF download timed out'), true);
+            }
+            $this->received += \strlen($bytes);
+            if ($this->stream->eof()) {
+                self::assertComplete($this->received, $this->expectedLength);
+            }
 
-        return $bytes;
+            return $bytes;
+        }
     }
 
     private function timedOut(): bool

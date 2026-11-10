@@ -6,9 +6,12 @@ namespace PoliPage\Tests\Unit\Internal\Http;
 
 use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use PoliPage\Internal\Http\DownloadStream;
+use PoliPage\Internal\Http\FirstByteDeadline;
 use PoliPage\PoliPageException;
+use PoliPage\Tests\Support\EarlyTimeoutStream;
 use PoliPage\Tests\Support\FailingStream;
 
 #[CoversClass(DownloadStream::class)]
@@ -81,5 +84,62 @@ final class DownloadStreamTest extends TestCase
                 self::assertInstanceOf(\ErrorException::class, $e->getPrevious());
             }
         }
+    }
+
+    /**
+     * A wait for the first byte that times out before its deadline (a
+     * timer that woke early) waits again for the rest: the timeout never
+     * ends before its bound.
+     */
+    #[DataProvider('earlyTimeouts')]
+    public function testAFirstByteWaitThatWokeEarlyWaitsForTheRest(bool $throws, string $read): void
+    {
+        $inner = new EarlyTimeoutStream('%PDF-1.7', timeouts: 2, throws: $throws);
+        $stream = new DownloadStream($inner, 8, self::firstByte(hrtime(true) + 10_000_000_000));
+
+        self::assertSame('%PDF-1.7', $read === 'read' ? $stream->read(8192) : $stream->getContents());
+        self::assertSame(3, $inner->reads, 'read again after each early timeout');
+    }
+
+    /**
+     * Once the deadline is reached, a timed-out wait for the first byte is
+     * the timeout.
+     */
+    #[DataProvider('earlyTimeouts')]
+    public function testAFirstByteTimeoutAtTheDeadlineStands(bool $throws, string $read): void
+    {
+        $inner = new EarlyTimeoutStream('%PDF-1.7', timeouts: 1, throws: $throws);
+        $stream = new DownloadStream($inner, 8, self::firstByte(hrtime(true) - 1));
+
+        try {
+            $read === 'read' ? $stream->read(8192) : $stream->getContents();
+            self::fail('Expected DOWNLOAD_FAILED');
+        } catch (PoliPageException $e) {
+            self::assertSame(PoliPageException::DOWNLOAD_FAILED, $e->errorCode);
+            self::assertSame('Failed to download PDF: timeout', $e->getMessage());
+        }
+        self::assertSame(1, $inner->reads);
+    }
+
+    /**
+     * @return iterable<string, array{bool, string}>
+     */
+    public static function earlyTimeouts(): iterable
+    {
+        foreach (['timed_out flag' => false, 'timeout error' => true] as $how => $throws) {
+            foreach (['read', 'getContents'] as $read) {
+                yield $how . ', ' . $read => [$throws, $read];
+            }
+        }
+    }
+
+    private static function firstByte(int $deadlineNs): FirstByteDeadline
+    {
+        // No read timeout on an in-memory stream: the inner stream's own
+        // reads say when they time out.
+        $memory = fopen('php://memory', 'r');
+        self::assertIsResource($memory);
+
+        return new FirstByteDeadline($memory, $deadlineNs, 1.0);
     }
 }

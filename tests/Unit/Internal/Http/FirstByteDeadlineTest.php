@@ -7,6 +7,7 @@ namespace PoliPage\Tests\Unit\Internal\Http;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use PoliPage\Internal\Http\FirstByteDeadline;
+use PoliPage\Tests\Support\ReadTimeoutRecorder;
 
 /**
  * `arm()` bounds the next read of the stream by what is left of the budget,
@@ -63,6 +64,64 @@ final class FirstByteDeadlineTest extends TestCase
         @fread($reader, 1);
 
         self::assertGreaterThan(0.2, (hrtime(true) - $startedAt) / 1e9, 'the idle timeout, not the passed deadline');
+    }
+
+    /**
+     * PHP waits on a socket for whole milliseconds and drops the rest: a time
+     * left of 20.9 ms armed as is would wait 20 ms. Each timeout set is a
+     * whole millisecond that covers the time left.
+     */
+    public function testArmRoundsTheTimeLeftUpToAWholeMillisecond(): void
+    {
+        $stream = ReadTimeoutRecorder::open();
+        $deadlineNs = hrtime(true) + 20_900_000;
+        $deadline = new FirstByteDeadline($stream, $deadlineNs, 30.0);
+
+        $deadline->arm();
+        $armedAt = hrtime(true);
+
+        self::assertCount(1, ReadTimeoutRecorder::$microseconds);
+        $armed = ReadTimeoutRecorder::$microseconds[0];
+        self::assertSame(0, $armed % 1000, "a whole millisecond, not {$armed} µs");
+        self::assertGreaterThanOrEqual($deadlineNs - $armedAt, $armed * 1000, 'covers the time left');
+        self::assertLessThanOrEqual(21_000, $armed);
+    }
+
+    public function testRearmBeforeTheDeadlineArmsForTheRest(): void
+    {
+        $stream = ReadTimeoutRecorder::open();
+        $deadlineNs = hrtime(true) + 10_000_000_000;
+        $deadline = new FirstByteDeadline($stream, $deadlineNs, 30.0);
+
+        self::assertTrue($deadline->rearm(), 'time is left: read again');
+        $armedAt = hrtime(true);
+
+        self::assertCount(1, ReadTimeoutRecorder::$microseconds);
+        $armed = ReadTimeoutRecorder::$microseconds[0];
+        self::assertSame(0, $armed % 1000);
+        self::assertGreaterThanOrEqual($deadlineNs - $armedAt, $armed * 1000, 'covers the time left');
+    }
+
+    public function testRearmAtTheDeadlineLetsTheTimeoutStand(): void
+    {
+        $stream = ReadTimeoutRecorder::open();
+        $deadline = new FirstByteDeadline($stream, hrtime(true) - 1, 30.0);
+
+        self::assertFalse($deadline->rearm());
+        self::assertSame([], ReadTimeoutRecorder::$microseconds, 'nothing armed');
+    }
+
+    /**
+     * The idle timeout is rounded up to a whole millisecond as well.
+     */
+    public function testDisarmRoundsTheIdleTimeoutUpToAWholeMillisecond(): void
+    {
+        $stream = ReadTimeoutRecorder::open();
+        $deadline = new FirstByteDeadline($stream, hrtime(true), 0.0209);
+
+        $deadline->disarm();
+
+        self::assertSame([21_000], ReadTimeoutRecorder::$microseconds);
     }
 
     public function testAStreamWithoutReadTimeoutOrAClosedOneIsLeftAlone(): void
