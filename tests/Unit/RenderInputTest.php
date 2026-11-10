@@ -140,16 +140,9 @@ final class RenderInputTest extends TestCase
         );
 
         self::assertSame(
-            [
-                'project' => 'billing',
-                'template' => 'invoice',
-                'data' => ['n' => 1],
-                'format' => 'A5',
-                'orientation' => 'landscape',
-                'locale' => 'fr-FR',
-                'metadata' => ['customerId' => 'cust_1'],
-            ],
-            $input->toWire(),
+            '{"project":"billing","template":"invoice","data":{"n":1},"format":"A5",'
+            . '"orientation":"landscape","locale":"fr-FR","metadata":{"customerId":"cust_1"}}',
+            json_encode($input->toWire(), flags: JSON_THROW_ON_ERROR),
         );
     }
 
@@ -157,7 +150,11 @@ final class RenderInputTest extends TestCase
     {
         $input = new RenderInput(project: 'billing', template: 'invoice', data: []);
 
-        self::assertSame(['project' => 'billing', 'template' => 'invoice', 'data' => []], $input->toWire());
+        // Empty `data` is a JSON object on the wire, never `[]`.
+        self::assertSame(
+            '{"project":"billing","template":"invoice","data":{}}',
+            json_encode($input->toWire(), flags: JSON_THROW_ON_ERROR),
+        );
     }
 
     /**
@@ -181,5 +178,34 @@ final class RenderInputTest extends TestCase
             'data' => [],
             $field => 'x',
         ]);
+    }
+
+    public function testEmptyMetadataIsSentAsAJsonObject(): void
+    {
+        $input = new RenderInput(
+            project: 'billing',
+            template: 'invoice',
+            data: ['n' => 1],
+            metadata: new RenderMetadata([]),
+        );
+
+        self::assertSame(
+            '{"project":"billing","template":"invoice","data":{"n":1},"metadata":{}}',
+            json_encode($input->toWire(), flags: JSON_THROW_ON_ERROR),
+        );
+    }
+
+    public function testListsInsideDataStayJsonArrays(): void
+    {
+        $input = new RenderInput(
+            project: 'billing',
+            template: 'invoice',
+            data: ['lines' => [], 'tags' => ['a', 'b']],
+        );
+
+        self::assertSame(
+            '{"project":"billing","template":"invoice","data":{"lines":[],"tags":["a","b"]}}',
+            json_encode($input->toWire(), flags: JSON_THROW_ON_ERROR),
+        );
     }
 }

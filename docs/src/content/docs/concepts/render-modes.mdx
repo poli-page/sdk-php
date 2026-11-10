@@ -21,6 +21,8 @@ There is no version to pick: the render uses the project's copy published in the
 
 `RenderInput` also takes the optional `format`, `orientation`, `locale` and `metadata` fields, plus the SDK-only `idempotencyKey` and `timeout`.
 
+`data` and `metadata` are always sent as JSON objects, so an empty `data: []` goes out as `{}`. Values inside `data` are sent as you give them: an empty PHP array there becomes the JSON list `[]`. For an empty nested object, pass `new \stdClass()`.
+
 ## Trying a template
 
 The API renders only published templates. To try a template or a piece of HTML before you publish it, use the public playground at [play.poli.page](https://play.poli.page).

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A render with empty `data` (`data: []`) or empty `metadata` now sends
+  `"data":{}` and `"metadata":{}`, as the API contract types them, instead of
+  the JSON array `[]`. Values inside `data` are sent unchanged: pass
+  `new \stdClass()` for an empty nested object (#32).
+
 ## [0.13.1] - 2026-11-04
 
 `renderToFile()` and the `render->pdfStream()` timeout now follow the same
