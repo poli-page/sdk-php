@@ -47,6 +47,12 @@ use Psr\Http\Message\StreamInterface;
  * whole-download bound is per read rather than a total on Guzzle 7, whose
  * stream handler has no total timeout.
  *
+ * **Whole milliseconds.** Guzzle (`(int) ($seconds * 1000)`), cURL's
+ * `CURLOPT_TIMEOUT_MS` (Guzzle 7, Symfony's `CurlHttpClient`) and PHP's
+ * socket waits drop the fraction of a millisecond, which would end a wait
+ * before the SDK's timeout. The timeout handed over is rounded up to a whole
+ * millisecond first ({@see handedOver()}).
+ *
  * A timeout of 0 or less: the SDK sets no timeout and the client's own
  * default applies (none for Guzzle over cURL, nor for Guzzle 8's stream
  * handler; PHP's `default_socket_timeout` for Symfony and for Guzzle 7's
@@ -118,6 +124,9 @@ final class TimeoutPolicy
         // immediate timeout).
         if ($timeoutSeconds !== null && $timeoutSeconds <= 0) {
             $timeoutSeconds = null;
+        }
+        if ($timeoutSeconds !== null) {
+            $timeoutSeconds = self::handedOver($timeoutSeconds);
         }
 
         if (class_exists(\GuzzleHttp\Client::class) && $client instanceof \GuzzleHttp\Client) {
@@ -212,6 +221,33 @@ final class TimeoutPolicy
         }
 
         return [$streamFactory->createStreamFromResource($resource), $resource];
+    }
+
+    /**
+     * The whole milliseconds that cover `$seconds`: rounded up, once rounded
+     * to the nanosecond of `hrtime()`, so that the float noise of a whole
+     * number of milliseconds (1.003 × 1e9 is not exactly 1003000000) never
+     * adds or drops one.
+     */
+    public static function wholeMilliseconds(float $seconds): int
+    {
+        return (int) ceil(round($seconds * 1e9) / 1e6);
+    }
+
+    /**
+     * The timeout handed to the HTTP client, in seconds: `$seconds` rounded up
+     * to a whole millisecond ({@see wholeMilliseconds()}), plus half a
+     * millisecond. Why the half: the float of a whole number of milliseconds
+     * can sit a hair under it (1.003 × 1000 is 1002.999…), so a client that
+     * drops the fraction would still arm one millisecond less. With it, every
+     * such client lands on the rounded-up millisecond; a client that keeps the
+     * float (Symfony's own clock) waits half a millisecond more.
+     *
+     * @internal public for its unit test
+     */
+    public static function handedOver(float $seconds): float
+    {
+        return (self::wholeMilliseconds($seconds) + 0.5) / 1000;
     }
 
     /**
