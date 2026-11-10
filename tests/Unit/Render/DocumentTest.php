@@ -34,8 +34,8 @@ final class DocumentTest extends TestCase
         self::assertSame(Constants::PATH_RENDER, $call['path']);
         self::assertSame('idem-1', $call['idempotencyKey']);
         self::assertSame(
-            ['project' => 'billing', 'template' => 'invoice', 'data' => ['n' => 1]],
-            $call['body'],
+            '{"project":"billing","template":"invoice","data":{"n":1}}',
+            json_encode($call['body'], flags: JSON_THROW_ON_ERROR),
         );
 
         // Returned descriptor mirrors wire shape

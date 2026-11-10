@@ -37,6 +37,12 @@ final readonly class RenderInput
      * Serialise the input to the JSON-encodable array sent to the API:
      * the documented render fields only, `null` optionals omitted.
      *
+     * `data` and `metadata` are JSON objects on the wire, so they go out
+     * as `\stdClass`: `json_encode` writes a PHP array whose keys run
+     * 0..n-1 (the empty array, or keys like "0" that PHP casts to
+     * integers) as a JSON array. Values inside `data` are sent as given;
+     * pass an object for a nested map that is empty or keyed that way.
+     *
      * @return array<string, mixed>
      *
      * @internal Wire shape is an implementation detail; callers should not depend on it.
@@ -46,7 +52,7 @@ final readonly class RenderInput
         $wire = [
             'project' => $this->project,
             'template' => $this->template,
-            'data' => $this->data,
+            'data' => (object) $this->data,
         ];
         if ($this->format !== null) {
             $wire['format'] = $this->format->value;
@@ -58,7 +64,7 @@ final readonly class RenderInput
             $wire['locale'] = $this->locale;
         }
         if ($this->metadata !== null) {
-            $wire['metadata'] = $this->metadata->toArray();
+            $wire['metadata'] = (object) $this->metadata->toArray();
         }
 
         return $wire;

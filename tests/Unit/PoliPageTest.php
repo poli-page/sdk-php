@@ -20,6 +20,7 @@ use PoliPage\Internal\Version;
 use PoliPage\PoliPage;
 use PoliPage\PoliPageException;
 use PoliPage\RenderInput;
+use PoliPage\RenderMetadata;
 use PoliPage\Tests\Support\DocumentWire;
 use Psr\Http\Client\NetworkExceptionInterface;
 use Psr\Http\Message\RequestInterface;
@@ -88,6 +89,28 @@ final class PoliPageTest extends TestCase
                 'data' => ['n' => 1],
             ],
             $body,
+        );
+    }
+
+    public function testRenderSendsEmptyDataAndMetadataAsJsonObjects(): void
+    {
+        [$client, $mock, $factory] = $this->makeClientWithMock();
+        $mock->addResponse(
+            $factory->createResponse(200)->withBody($factory->createStream(DocumentWire::descriptorJson())),
+        );
+
+        $client->render->document(new RenderInput(
+            project: 'billing',
+            template: 'invoice',
+            data: [],
+            metadata: new RenderMetadata([]),
+        ));
+
+        $request = $mock->getLastRequest();
+        self::assertInstanceOf(RequestInterface::class, $request);
+        self::assertSame(
+            '{"project":"billing","template":"invoice","data":{},"metadata":{}}',
+            (string) $request->getBody(),
         );
     }
 
