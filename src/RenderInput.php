@@ -38,9 +38,10 @@ final readonly class RenderInput
      * the documented render fields only, `null` optionals omitted.
      *
      * `data` and `metadata` are JSON objects on the wire, so they go out
-     * as `\stdClass`: `json_encode` writes an empty PHP array as the JSON
-     * array `[]`. Values inside `data` are sent as given; pass
-     * `new \stdClass()` for an empty nested object.
+     * as `\stdClass`: `json_encode` writes a PHP array whose keys run
+     * 0..n-1 (the empty array, or keys like "0" that PHP casts to
+     * integers) as a JSON array. Values inside `data` are sent as given;
+     * pass an object for a nested map that is empty or keyed that way.
      *
      * @return array<string, mixed>
      *

@@ -21,7 +21,7 @@ There is no version to pick: the render uses the project's copy published in the
 
 `RenderInput` also takes the optional `format`, `orientation`, `locale` and `metadata` fields, plus the SDK-only `idempotencyKey` and `timeout`.
 
-`data` and `metadata` are always sent as JSON objects, so an empty `data: []` goes out as `{}`. Values inside `data` are sent as you give them: an empty PHP array there becomes the JSON list `[]`. For an empty nested object, pass `new \stdClass()`.
+`data` and `metadata` are always sent as JSON objects: an empty `data: []` goes out as `{}`, and `data: ['0' => 'a', '1' => 'b']` as `{"0":"a","1":"b"}`. Values inside `data` are sent as you give them, and PHP encodes any array whose keys run 0..n-1 as a JSON list: an empty array becomes `[]`, and `'deep' => ['0' => ['k' => 1]]` becomes `"deep":[{"k":1}]`. For a nested map that is empty or keyed that way, pass `new \stdClass()` or another object, such as `(object) ['0' => ['k' => 1]]`.
 
 ## Trying a template
 

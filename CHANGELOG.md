@@ -9,10 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- A render with empty `data` (`data: []`) or empty `metadata` now sends
-  `"data":{}` and `"metadata":{}`, as the API contract types them, instead of
-  the JSON array `[]`. Values inside `data` are sent unchanged: pass
-  `new \stdClass()` for an empty nested object (#32).
+- `data` and `metadata` are now always sent as JSON objects, as the API
+  contract types them. An empty one (`data: []`) went out as the JSON array
+  `[]` and now goes out as `{}`. One whose keys run 0..n-1 (such as
+  `['0' => 'a', '1' => 'b']`, which PHP stores as a list) went out as
+  `["a","b"]` and now goes out as `{"0":"a","1":"b"}`. Values inside `data`
+  are sent unchanged: pass `new \stdClass()` or an object for a nested map
+  that is empty or keyed 0..n-1 (#32).
 
 ## [0.13.1] - 2026-11-04
 

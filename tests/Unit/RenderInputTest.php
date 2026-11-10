@@ -208,4 +208,44 @@ final class RenderInputTest extends TestCase
             json_encode($input->toWire(), flags: JSON_THROW_ON_ERROR),
         );
     }
+
+    /**
+     * PHP casts the string keys "0", "1" to integers, so such a map is a
+     * list to `json_encode`; it must still go out as a JSON object.
+     */
+    public function testMapsWhoseKeysRunFromZeroAreSentAsJsonObjects(): void
+    {
+        $input = new RenderInput(
+            project: 'billing',
+            template: 'invoice',
+            data: self::map(['0', '1'], ['a', 'b']),
+            metadata: new RenderMetadata(self::map(['0'], ['x'])),
+        );
+
+        self::assertSame(
+            '{"project":"billing","template":"invoice","data":{"0":"a","1":"b"},"metadata":{"0":"x"}}',
+            json_encode($input->toWire(), flags: JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * Builds a map from string keys the way caller code does at run time
+     * (keys read from a form, a CSV header, a database column). A literal
+     * such as `['0' => 'a']` would not do: PHPStan sees its key as the
+     * integer PHP casts it to, outside `array<string, mixed>`.
+     *
+     * @param list<string> $keys
+     * @param list<mixed>  $values
+     *
+     * @return array<string, mixed>
+     */
+    private static function map(array $keys, array $values): array
+    {
+        $map = [];
+        foreach ($keys as $i => $key) {
+            $map[$key] = $values[$i] ?? null;
+        }
+
+        return $map;
+    }
 }
