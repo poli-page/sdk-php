@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `tests/Contract` reads the contract's format 2 and checks `expect.minCallMs`:
+  a case a timeout ends fails when the whole call, timed on `hrtime()`, lasts
+  less than its bound. A case that sets the bound but is stopped at a retry
+  event fails the run instead of skipping the check. CI pins the API contract
+  v0.15.0-dev.1.
+
+### Fixed
+
+- A timeout never ends before its bound. The SDK hands Guzzle and Symfony
+  HTTP Client its timeout rounded up to a whole millisecond: Guzzle and cURL
+  drop the fraction of a millisecond, so a `timeout` of 1.003 s armed 1002 ms.
+  The wait for the first byte of `render->pdfStream()` and `renderToFile()`
+  arms what is left of its budget rounded up to a whole millisecond (PHP waits
+  on a socket for whole milliseconds, so it could end up to 1 ms early), and
+  a wait that still ends before the deadline waits again for the rest.
+
 ## [0.13.1] - 2026-11-04
 
 `renderToFile()` and the `render->pdfStream()` timeout now follow the same
