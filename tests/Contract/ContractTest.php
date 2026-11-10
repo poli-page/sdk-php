@@ -23,9 +23,10 @@ use PoliPage\PoliPageException;
  * against a local HTTP server (its own process) that answers the case's
  * `responses` in order and records each request; the test then compares the
  * recorded requests, the `onRequest` / `onRetry` events and the normalized
- * result with the case's `expect`. Timing is checked as lower bounds,
- * measured on the server. Each case runs through Guzzle and through Symfony
- * HttpClient.
+ * result with the case's `expect`. Timing is checked as lower bounds: the
+ * gap before a request on the server's clock, the duration of the whole call
+ * (`expect.minCallMs`) on the test's `hrtime()` clock. Each case runs
+ * through Guzzle and through Symfony HttpClient.
  *
  * `tests/contract-skip.json` maps the case ids allowed to fail to the reason;
  * a key `<id>@guzzle` or `<id>@symfony` lists a case for that client only.
@@ -93,6 +94,28 @@ final class ContractTest extends TestCase
         }
         $unknown = array_values(array_diff(array_keys($contract->skip), $keys));
         self::assertSame([], $unknown, 'not cases this test runs: remove them from tests/contract-skip.json');
+    }
+
+    public function testAMinCallMsBoundIsNeverSkippedInSilence(): void
+    {
+        $stopped = self::syntheticCase(['minCallMs' => 150], stopAfterRetryEvents: 1);
+
+        try {
+            self::assertCallDuration($stopped, null);
+            self::fail('a call stopped at a retry event skipped its minCallMs bound');
+        } catch (ContractException $e) {
+            self::assertStringContainsString('synthetic.case: expect.minCallMs is set but the call was stopped', $e->getMessage());
+        }
+        self::assertCallDuration($stopped, 150);
+        self::assertCallDuration(self::syntheticCase([]), null);
+    }
+
+    public function testACallShorterThanMinCallMsFails(): void
+    {
+        $this->expectException(AssertionFailedError::class);
+        $this->expectExceptionMessage('call duration');
+
+        self::assertCallDuration(self::syntheticCase(['minCallMs' => 150]), 149);
     }
 
     public function testSdkMessagesMatchThePolicy(): void
@@ -236,14 +259,7 @@ final class ContractTest extends TestCase
             self::canonical($this->describeEvents($invoker->events, $events)),
             'onRequest / onRetry events',
         );
-        if ($case->minCallMs !== null && $invoker->callMs !== null) {
-            // N-DURATION-MS: compared in whole milliseconds, like a gap.
-            self::assertSame(
-                ['minCallMs' => $case->minCallMs],
-                ['minCallMs' => $invoker->callMs >= $case->minCallMs ? $case->minCallMs : sprintf('only %d ms', $invoker->callMs)],
-                'call duration',
-            );
-        }
+        self::assertCallDuration($case, $invoker->callMs);
         if ($checkResult) {
             self::assertSame(
                 self::canonical(Placeholders::substitute($case->expectedResult(), $mock)),
@@ -251,6 +267,56 @@ final class ContractTest extends TestCase
                 'result',
             );
         }
+    }
+
+    /**
+     * A `kind: "sdk"` case with this `expect`, for the checks that need no
+     * contract file.
+     *
+     * @param array<string, mixed> $expect
+     */
+    private static function syntheticCase(array $expect, ?int $stopAfterRetryEvents = null): ContractCase
+    {
+        $case = [
+            'id' => 'synthetic.case',
+            'kind' => 'sdk',
+            'call' => ['method' => 'documents.get', 'args' => ['doc_1']],
+            'options' => ['maxRetries' => 1, 'retryDelayMs' => 10, 'timeoutMs' => 1000],
+            'responses' => [],
+            'expect' => $expect,
+        ];
+        if ($stopAfterRetryEvents !== null) {
+            $case['stopAfterRetryEvents'] = $stopAfterRetryEvents;
+        }
+        $object = json_decode(json_encode($case, JSON_THROW_ON_ERROR), false, 512, JSON_THROW_ON_ERROR);
+        self::assertInstanceOf(\stdClass::class, $object);
+
+        return new ContractCase($case, $object);
+    }
+
+    /**
+     * `expect.minCallMs`, when the case sets it: the call lasted at least that
+     * long. A bound is never skipped in silence: a call stopped at a retry
+     * event has no duration to check (`$callMs` null), which is a
+     * ContractException.
+     */
+    private static function assertCallDuration(ContractCase $case, ?int $callMs): void
+    {
+        if ($case->minCallMs === null) {
+            return;
+        }
+        if ($callMs === null) {
+            throw new ContractException(sprintf(
+                '%s: expect.minCallMs is set but the call was stopped at a retry event, so its duration cannot be checked',
+                $case->id,
+            ));
+        }
+        // N-DURATION-MS: compared in whole milliseconds, like a gap.
+        self::assertSame(
+            ['minCallMs' => $case->minCallMs],
+            ['minCallMs' => $callMs >= $case->minCallMs ? $case->minCallMs : sprintf('only %d ms', $callMs)],
+            'call duration',
+        );
     }
 
     /**
