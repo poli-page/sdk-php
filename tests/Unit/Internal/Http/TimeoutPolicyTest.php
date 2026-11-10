@@ -5,16 +5,22 @@ declare(strict_types=1);
 namespace PoliPage\Tests\Unit\Internal\Http;
 
 use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
 use Http\Mock\Client as MockClient;
 use Nyholm\Psr7\Factory\Psr17Factory;
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use PoliPage\Internal\Http\StreamResourceRecorder;
 use PoliPage\Internal\Http\TimeoutPolicy;
 use PoliPage\Tests\Support\FailingStream;
 use Psr\Http\Client\ClientExceptionInterface;
 use Psr\Http\Message\RequestInterface;
+use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Psr18Client;
+use Symfony\Component\HttpClient\Response\MockResponse;
 
 #[CoversClass(TimeoutPolicy::class)]
 final class TimeoutPolicyTest extends TestCase
@@ -183,5 +189,151 @@ final class TimeoutPolicyTest extends TestCase
         rewind($memory);
 
         return $memory;
+    }
+
+    /**
+     * The whole milliseconds a client arms for each timeout handed over,
+     * when it drops the fraction as Guzzle (`(int) ($seconds * 1000)`) and
+     * cURL's `CURLOPT_TIMEOUT_MS` do: the SDK's timeout rounded up, never
+     * less, also where the float of a whole millisecond sits a hair under it
+     * (1.003 × 1000 is 1002.999…).
+     */
+    public function testHandedOverTimeoutsTruncateToTheTimeoutRoundedUp(): void
+    {
+        for ($ms = 1; $ms <= 120_000; ++$ms) {
+            $handedOver = TimeoutPolicy::handedOver($ms / 1000);
+            $armed = (int) ($handedOver * 1000);
+            if ($armed !== $ms) {
+                self::fail(sprintf('%d ms handed over as %.9F s, armed as %d ms', $ms, $handedOver, $armed));
+            }
+        }
+        self::assertSame(1004, self::truncatedMs(TimeoutPolicy::handedOver(1.0031)));
+        self::assertSame(1, self::truncatedMs(TimeoutPolicy::handedOver(0.0001)));
+    }
+
+    /**
+     * @return iterable<string, array{float, int}>
+     */
+    public static function timeoutsAndWholeMilliseconds(): iterable
+    {
+        yield '1.003 s' => [1.003, 1003];
+        yield '1.0005 s' => [1.0005, 1001];
+        yield '0.2509 s' => [0.2509, 251];
+        yield '60 s' => [60.0, 60000];
+    }
+
+    #[DataProvider('timeoutsAndWholeMilliseconds')]
+    public function testGuzzleGetsTheTimeoutRoundedUpToAWholeMillisecond(float $timeout, int $ms): void
+    {
+        $handler = new MockHandler([new Response(200), new Response(200)]);
+        $client = new GuzzleClient(['handler' => HandlerStack::create($handler)]);
+        $request = (new Psr17Factory())->createRequest('GET', 'https://example.test/x');
+
+        TimeoutPolicy::send($client, $request, $timeout);
+        $options = $handler->getLastOptions();
+        self::assertSame($ms, self::truncatedMs($options['timeout'] ?? null), 'the attempt timeout');
+
+        TimeoutPolicy::send($client, $request, $timeout, idle: true);
+        $options = $handler->getLastOptions();
+        self::assertSame($ms, self::truncatedMs($options['timeout'] ?? null), 'the download timeout');
+        if (\array_key_exists('read_timeout', $options)) {
+            self::assertSame($ms, self::truncatedMs($options['read_timeout']), 'the idle timeout (Guzzle 8)');
+        }
+    }
+
+    #[DataProvider('timeoutsAndWholeMilliseconds')]
+    public function testSymfonyGetsTheTimeoutRoundedUpToAWholeMillisecond(float $timeout, int $ms): void
+    {
+        /** @var list<array<mixed>> $sent */
+        $sent = [];
+        $client = new Psr18Client(new MockHttpClient(static function (string $method, string $url, array $options) use (&$sent): MockResponse {
+            $sent[] = $options;
+
+            return new MockResponse('', ['http_code' => 200]);
+        }));
+        $request = (new Psr17Factory())->createRequest('GET', 'https://example.test/x');
+
+        TimeoutPolicy::send($client, $request, $timeout);
+        TimeoutPolicy::send($client, $request, $timeout, idle: true);
+
+        self::assertCount(2, $sent);
+        // CurlHttpClient hands `1000 * max_duration` to CURLOPT_TIMEOUT_MS.
+        self::assertSame($ms, self::truncatedMs($sent[0]['max_duration'] ?? null), 'the attempt timeout');
+        self::assertSame($ms, self::truncatedMs($sent[0]['timeout'] ?? null), 'the idle timeout of an attempt');
+        self::assertSame($ms, self::truncatedMs($sent[1]['timeout'] ?? null), 'the download timeout');
+        self::assertGreaterThanOrEqual($timeout, $sent[1]['timeout'], 'Symfony keeps the float');
+    }
+
+    /**
+     * @return iterable<string, array{float|null}>
+     */
+    public static function noTimeouts(): iterable
+    {
+        yield 'INF' => [INF];
+        yield '-INF' => [-INF];
+        yield 'NAN' => [NAN];
+        yield '1e16 s' => [1e16];
+        yield 'just over MAX_SECONDS' => [TimeoutPolicy::MAX_SECONDS * 1.000001];
+        yield '0' => [0.0];
+        yield '-1 s' => [-1.0];
+        yield 'null' => [null];
+    }
+
+    /**
+     * Such a timeout has no whole milliseconds an int holds: no timeout, as 0
+     * is, never a wrapped one (INF used to arm half a millisecond).
+     */
+    #[DataProvider('noTimeouts')]
+    public function testATimeoutWithNoWholeMillisecondsIsNoTimeout(?float $timeout): void
+    {
+        self::assertNull(TimeoutPolicy::effective($timeout));
+
+        $handler = new MockHandler([new Response(200), new Response(200)]);
+        $guzzle = new GuzzleClient(['handler' => HandlerStack::create($handler)]);
+        $request = (new Psr17Factory())->createRequest('GET', 'https://example.test/x');
+        foreach ([false, true] as $idle) {
+            TimeoutPolicy::send($guzzle, $request, $timeout, idle: $idle);
+            $options = $handler->getLastOptions();
+            self::assertSame(0, $options['timeout'] ?? null, 'Guzzle reads 0 as no timeout');
+        }
+
+        /** @var list<array<mixed>> $sent */
+        $sent = [];
+        $symfony = new Psr18Client(new MockHttpClient(static function (string $method, string $url, array $options) use (&$sent): MockResponse {
+            $sent[] = $options;
+
+            return new MockResponse('', ['http_code' => 200]);
+        }));
+        TimeoutPolicy::send($symfony, $request, $timeout);
+        // Symfony's own defaults: no total, PHP's default_socket_timeout idle.
+        self::assertEquals(0, $sent[0]['max_duration'] ?? null);
+        self::assertEquals((float) ini_get('default_socket_timeout'), $sent[0]['timeout'] ?? null);
+    }
+
+    public function testEffectiveKeepsAFiniteTimeoutUpToMaxSeconds(): void
+    {
+        self::assertSame(0.000001, TimeoutPolicy::effective(0.000001));
+        self::assertSame(1.003, TimeoutPolicy::effective(1.003));
+        self::assertSame(TimeoutPolicy::MAX_SECONDS, TimeoutPolicy::effective(TimeoutPolicy::MAX_SECONDS));
+        self::assertSame(1_000_000_000_000, TimeoutPolicy::wholeMilliseconds(TimeoutPolicy::MAX_SECONDS));
+    }
+
+    public function testMessageMillisecondsNeverWraps(): void
+    {
+        self::assertSame('1003', TimeoutPolicy::messageMilliseconds(1.003));
+        self::assertSame('0', TimeoutPolicy::messageMilliseconds(0.0));
+        self::assertSame('INF', TimeoutPolicy::messageMilliseconds(INF));
+        self::assertSame('NAN', TimeoutPolicy::messageMilliseconds(NAN));
+        self::assertSame('1.0E+19', TimeoutPolicy::messageMilliseconds(1e16));
+    }
+
+    /**
+     * The whole milliseconds a client that drops the fraction arms.
+     */
+    private static function truncatedMs(mixed $seconds): int
+    {
+        self::assertTrue(\is_float($seconds) || \is_int($seconds), 'a timeout in seconds');
+
+        return (int) ($seconds * 1000);
     }
 }

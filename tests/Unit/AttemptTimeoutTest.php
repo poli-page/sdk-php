@@ -13,6 +13,8 @@ use PoliPage\Internal\Http\TimeoutPolicy;
 use PoliPage\PoliPage;
 use PoliPage\PoliPageException;
 use PoliPage\Tests\Contract\MockServer;
+use PoliPage\Tests\Support\DocumentWire;
+use PoliPage\Tests\Support\TrickleServer;
 use Psr\Http\Client\ClientInterface;
 use Symfony\Component\HttpClient\Psr18Client;
 
@@ -64,6 +66,44 @@ final class AttemptTimeoutTest extends TestCase
 
         self::assertLessThan(3.0, $elapsedSeconds, 'the 0.2 s SDK timeout ended the attempt');
         self::assertCount(1, $requests);
+    }
+
+    /**
+     * @return iterable<string, array{string, float}>
+     */
+    public static function httpClientsAndNoTimeouts(): iterable
+    {
+        foreach (['guzzle', 'symfony'] as $httpClient) {
+            foreach (['INF' => INF, '1e16 s' => 1e16, 'NAN' => NAN] as $name => $timeout) {
+                yield $httpClient . ' ' . $name => [$httpClient, $timeout];
+            }
+        }
+    }
+
+    /**
+     * A timeout that is not a finite number of seconds up to
+     * TimeoutPolicy::MAX_SECONDS is no timeout, as 0 is, with both clients:
+     * an answer 300 ms late comes through. Converted to whole milliseconds,
+     * INF wrapped to 0 and armed half a millisecond.
+     */
+    #[DataProvider('httpClientsAndNoTimeouts')]
+    public function testAnInfiniteOrHugeTimeoutIsNoTimeout(string $httpClient, float $timeout): void
+    {
+        $server = new TrickleServer([[[300, "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\nconnection: close\r\n\r\n"
+            . DocumentWire::descriptorJson()]]]);
+        try {
+            $client = new PoliPage(
+                apiKey: 'pp_sandbox_x',
+                baseUrl: $server->origin,
+                maxRetries: 0,
+                timeout: $timeout,
+                httpClient: self::httpClient($httpClient),
+            );
+
+            self::assertSame('doc_abc', $client->documents->get('doc_abc')->documentId);
+        } finally {
+            $server->stop();
+        }
     }
 
     private static function httpClient(string $name): ClientInterface

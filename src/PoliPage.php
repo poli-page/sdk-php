@@ -229,8 +229,9 @@ final class PoliPage implements Transport
         [$body, $resource] = TimeoutPolicy::streamedBody($this->httpClient, $response->getBody(), $recorder, $this->streamFactory);
 
         $firstByte = null;
-        if ($timeout > 0 && TimeoutPolicy::appliesTimeout($this->httpClient)) {
-            $deadlineNs = $startedAt + (int) round($timeout * 1e9);
+        $applied = TimeoutPolicy::effective($timeout);
+        if ($applied !== null && TimeoutPolicy::appliesTimeout($this->httpClient)) {
+            $deadlineNs = $startedAt + (int) round($applied * 1e9);
             if (hrtime(true) >= $deadlineNs) {
                 $body->close();
                 throw DownloadStream::failure(
@@ -239,7 +240,7 @@ final class PoliPage implements Transport
                 );
             }
             if ($resource !== null) {
-                $firstByte = new FirstByteDeadline($resource, $deadlineNs, $timeout);
+                $firstByte = new FirstByteDeadline($resource, $deadlineNs, $applied);
             }
         }
 
@@ -280,9 +281,10 @@ final class PoliPage implements Transport
             // stream handler, reports a timeout before the answer only as
             // "HTTP request failed!". A failure once a positive timeout has
             // elapsed is that timeout; 1 ms covers timers that round it down.
-            // With a timeout of 0 or less the SDK sets none, so it never applies.
+            // With no SDK timeout (0 or less, INF...) it never applies.
+            $applied = TimeoutPolicy::effective($timeout);
             $elapsed = (hrtime(true) - $startedAt) / 1e9;
-            throw DownloadStream::failure($e, timedOut: $timeout > 0 && $elapsed >= $timeout - 0.001);
+            throw DownloadStream::failure($e, timedOut: $applied !== null && $elapsed >= $applied - 0.001);
         }
 
         $status = $response->getStatusCode();
@@ -416,7 +418,7 @@ final class PoliPage implements Transport
     {
         if (TimeoutPolicy::isTimeout($e)) {
             return ExceptionClassifier::timeout(
-                str_replace('{timeoutMs}', (string) (int) round($timeout * 1000), Constants::MESSAGE_TIMEOUT),
+                str_replace('{timeoutMs}', TimeoutPolicy::messageMilliseconds($timeout), Constants::MESSAGE_TIMEOUT),
                 $e,
             );
         }

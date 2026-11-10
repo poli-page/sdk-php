@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace PoliPage\Tests\Contract;
 
 /**
- * `contract.json` (format 1, README of poli-page/api-contract) and the skip
+ * `contract.json` (format 2, README of poli-page/api-contract) and the skip
  * list, read once per process.
  */
 final class ContractFile
 {
-    public const KNOWN_FORMAT_VERSION = 1;
+    public const KNOWN_FORMAT_VERSION = 2;
 
     /** This SDK's name in `policy.cancellationSdks`. */
     public const SDK_NAME = 'php';

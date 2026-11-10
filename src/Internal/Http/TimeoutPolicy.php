@@ -47,7 +47,15 @@ use Psr\Http\Message\StreamInterface;
  * whole-download bound is per read rather than a total on Guzzle 7, whose
  * stream handler has no total timeout.
  *
- * A timeout of 0 or less: the SDK sets no timeout and the client's own
+ * **Whole milliseconds.** Guzzle (`(int) ($seconds * 1000)`), cURL's
+ * `CURLOPT_TIMEOUT_MS` (Guzzle 7, Symfony's `CurlHttpClient`) and PHP's
+ * socket waits drop the fraction of a millisecond, which would end a wait
+ * before the SDK's timeout. The timeout handed over is rounded up to a whole
+ * millisecond first ({@see handedOver()}).
+ *
+ * A timeout of 0 or less, or one that is not a finite number of seconds up
+ * to {@see self::MAX_SECONDS} (`INF`, `NAN`, `1e16`), is no timeout
+ * ({@see effective()}): the SDK sets no timeout and the client's own
  * default applies (none for Guzzle over cURL, nor for Guzzle 8's stream
  * handler; PHP's `default_socket_timeout` for Symfony and for Guzzle 7's
  * stream handler).
@@ -91,6 +99,13 @@ final class TimeoutPolicy
     /** PSR-7 streams that hold a PHP stream resource and nothing else. */
     private const PLAIN_STREAMS = ['GuzzleHttp\\Psr7\\Stream', 'Nyholm\\Psr7\\Stream'];
 
+    /**
+     * The longest timeout the SDK applies, in seconds (about 31 years): its
+     * nanoseconds, added to `hrtime()`, still fit an int. A longer one, `INF`
+     * included, is no timeout ({@see effective()}).
+     */
+    public const MAX_SECONDS = 1e9;
+
     /** The most `withOptions()` clones kept per Symfony client. */
     public const MAX_SYMFONY_CLONES = 16;
 
@@ -113,11 +128,12 @@ final class TimeoutPolicy
         ?StreamResourceRecorder $recorder = null,
     ): ResponseInterface {
         $freshConnection = $request->getMethod() === 'POST' && \defined('CURLOPT_FRESH_CONNECT');
-        // A timeout of 0 or less: no SDK timeout. Guzzle reads 0 as none, and
+        // No SDK timeout ({@see effective()}): Guzzle reads 0 as none, and
         // Symfony gets no timeout option at all (it would read 0 as an
         // immediate timeout).
-        if ($timeoutSeconds !== null && $timeoutSeconds <= 0) {
-            $timeoutSeconds = null;
+        $timeoutSeconds = self::effective($timeoutSeconds);
+        if ($timeoutSeconds !== null) {
+            $timeoutSeconds = self::handedOver($timeoutSeconds);
         }
 
         if (class_exists(\GuzzleHttp\Client::class) && $client instanceof \GuzzleHttp\Client) {
@@ -212,6 +228,68 @@ final class TimeoutPolicy
         }
 
         return [$streamFactory->createStreamFromResource($resource), $resource];
+    }
+
+    /**
+     * The timeout the SDK applies, in seconds, or null for none: a timeout of
+     * 0 or less, and one that is not a finite number of seconds up to
+     * {@see self::MAX_SECONDS} (`INF`, `NAN`, `1e16`), are no timeout. Why:
+     * such a value has no whole milliseconds or nanoseconds an int can hold,
+     * and converting it would wrap (PHP turns `INF` into 0 with a warning),
+     * so `INF` armed half a millisecond. Then the client's own default
+     * applies, as for 0.
+     */
+    public static function effective(?float $seconds): ?float
+    {
+        if ($seconds === null || !is_finite($seconds) || $seconds <= 0 || $seconds > self::MAX_SECONDS) {
+            return null;
+        }
+
+        return $seconds;
+    }
+
+    /**
+     * The configured timeout in milliseconds, for `{timeoutMs}` in the
+     * timeout message: a whole number, or PHP's text of the float (`INF`)
+     * when no int holds it, never a wrapped int.
+     */
+    public static function messageMilliseconds(float $seconds): string
+    {
+        $milliseconds = $seconds * 1000;
+        if (is_finite($seconds) && abs($seconds) <= self::MAX_SECONDS) {
+            return (string) (int) round($milliseconds);
+        }
+
+        // PHP 8.5 warns when it turns NAN into a string.
+        return is_nan($milliseconds) ? 'NAN' : (string) $milliseconds;
+    }
+
+    /**
+     * The whole milliseconds that cover `$seconds`, a timeout {@see effective()}
+     * keeps: rounded up, once rounded
+     * to the nanosecond of `hrtime()`, so that the float noise of a whole
+     * number of milliseconds (1.003 × 1e9 is not exactly 1003000000) never
+     * adds or drops one.
+     */
+    public static function wholeMilliseconds(float $seconds): int
+    {
+        return (int) ceil(round($seconds * 1e9) / 1e6);
+    }
+
+    /**
+     * The timeout handed to the HTTP client, in seconds: `$seconds` rounded up
+     * to a whole millisecond ({@see wholeMilliseconds()}), plus half a
+     * millisecond. Why the half: the float of a whole number of milliseconds
+     * can sit a hair under it (1.003 × 1000 is 1002.999…), so a client that
+     * drops the fraction would still arm one millisecond less. With it, every
+     * such client lands on the rounded-up millisecond; a client that keeps the
+     * float (Symfony's own clock) waits half a millisecond more.
+     *
+     * @internal public for its unit test
+     */
+    public static function handedOver(float $seconds): float
+    {
+        return (self::wholeMilliseconds($seconds) + 0.5) / 1000;
     }
 
     /**

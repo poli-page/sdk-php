@@ -32,6 +32,9 @@ final readonly class ContractCase
 
     public ?int $stopAfterRetryEvents;
 
+    /** `expect.minCallMs` (format 2): the least the whole call may last, in milliseconds. */
+    public ?int $minCallMs;
+
     /**
      * @param array<array-key, mixed> $case
      */
@@ -70,6 +73,7 @@ final readonly class ContractCase
         $this->retryDelayMs = self::int($options, 'retryDelayMs', $id);
         $this->timeoutMs = self::int($options, 'timeoutMs', $id);
         $this->stopAfterRetryEvents = self::optionalInt($case, 'stopAfterRetryEvents', $id);
+        $this->minCallMs = self::optionalInt($this->field($case, 'expect'), 'minCallMs', $id);
     }
 
     /**

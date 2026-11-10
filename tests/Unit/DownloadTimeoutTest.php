@@ -138,6 +138,53 @@ final class DownloadTimeoutTest extends TestCase
     }
 
     /**
+     * The wait for the first byte never ends before the timeout, measured on
+     * `hrtime()` from before the download starts: PHP waits on a socket for
+     * whole milliseconds and drops the rest, so a time left of 99.6 ms armed
+     * as is used to end the wait after 99 ms. A timeout with a fraction of a
+     * millisecond, ten times over, since the fraction left at the first
+     * read varies with the time the headers took. Timing based: with the
+     * fix reverted it fails on some runs only (the scheduler often wakes
+     * the read late enough); FirstByteDeadlineTest and DownloadStreamTest
+     * catch a revert on every run.
+     */
+    #[DataProvider('httpClients')]
+    public function testPdfStreamFirstByteTimeoutNeverEndsBeforeItsBound(string $httpClient): void
+    {
+        $timeout = 0.1005;
+        for ($i = 0; $i < 10; ++$i) {
+            $this->server?->stop();
+            $server = new TrickleServer([TrickleServer::pdf(0, [[3000, '%PDF-1.7']])]);
+            $this->server = $server;
+            $client = new PoliPage(apiKey: 'pp_sandbox_x', timeout: $timeout, httpClient: self::httpClient($httpClient));
+
+            $startedAt = hrtime(true);
+            $error = self::downloadFailure(static fn () => self::readAll($client->streamBytes($server->origin . '/doc.pdf', $timeout), 'read'));
+            $elapsedNs = hrtime(true) - $startedAt;
+
+            self::assertTimeoutFailure($error);
+            self::assertGreaterThanOrEqual(
+                (int) round($timeout * 1e9),
+                $elapsedNs,
+                sprintf('the %.1f ms timeout ended after %.3f ms', $timeout * 1000, $elapsedNs / 1e6),
+            );
+        }
+    }
+
+    /**
+     * A timeout that is not a finite number of seconds up to
+     * TimeoutPolicy::MAX_SECONDS is no timeout for the download either: no
+     * first-byte deadline wrapped out of its nanoseconds.
+     */
+    #[DataProvider('httpClients')]
+    public function testPdfStreamWithAnInfiniteTimeoutHasNoTimeout(string $httpClient): void
+    {
+        $client = $this->clientFor($httpClient, TrickleServer::pdf(300, [[300, '%PDF-1.7']]), INF);
+
+        self::assertSame('%PDF-1.7', self::readAll($client->render->pdfStream(self::input()), 'read'));
+    }
+
+    /**
      * The headers and the first byte of the body, each within the timeout
      * but not both: the two waits share one budget.
      */

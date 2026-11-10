@@ -13,12 +13,17 @@ namespace PoliPage\Internal\Http;
  * budget while it waits for the first byte ({@see arm()}), then puts back the
  * idle timeout that bounds each gap between two chunks ({@see disarm()}).
  *
+ * Each read timeout set is rounded up to a whole millisecond: PHP waits on a
+ * socket for whole milliseconds and drops the rest, so a fractional time
+ * left would end the wait before the deadline. A read that still times out
+ * before the deadline waits again for the rest ({@see rearm()}).
+ *
  * @internal
  */
 final class FirstByteDeadline
 {
-    /** The shortest read timeout set: a passed deadline still lets bytes already received through. */
-    private const MIN_SECONDS = 0.000001;
+    /** The shortest read timeout set, in µs: a passed deadline still lets bytes already received through. */
+    private const MIN_MICROSECONDS = 1;
 
     /**
      * @param resource $resource    the PHP stream under the body, whose read timeout
@@ -34,11 +39,28 @@ final class FirstByteDeadline
     }
 
     /**
-     * Bounds the next read by what is left of the budget.
+     * Bounds the next read by what is left of the budget, rounded up to a
+     * whole millisecond.
      */
     public function arm(): void
     {
-        $this->setTimeout(max(($this->deadlineNs - hrtime(true)) / 1e9, self::MIN_SECONDS));
+        $leftNs = $this->deadlineNs - hrtime(true);
+        $this->setTimeout(max(intdiv($leftNs + 999_999, 1_000_000) * 1000, self::MIN_MICROSECONDS));
+    }
+
+    /**
+     * After a read that timed out: when the deadline is not reached yet (the
+     * wait woke early), bounds the next read by what is left and returns
+     * true, so the caller reads again; else false, and the timeout stands.
+     */
+    public function rearm(): bool
+    {
+        if (hrtime(true) >= $this->deadlineNs) {
+            return false;
+        }
+        $this->arm();
+
+        return true;
     }
 
     /**
@@ -46,18 +68,16 @@ final class FirstByteDeadline
      */
     public function disarm(): void
     {
-        $this->setTimeout($this->idleSeconds);
+        $this->setTimeout(TimeoutPolicy::wholeMilliseconds($this->idleSeconds) * 1000);
     }
 
-    private function setTimeout(float $seconds): void
+    private function setTimeout(int $microseconds): void
     {
         if (!\is_resource($this->resource)) {
             return;
         }
-        $whole = (int) floor($seconds);
-        $micro = min(999_999, (int) round(($seconds - $whole) * 1e6));
         // A stream that has no read timeout (an in-memory body) reports it
         // with `false` and a warning: nothing to bound then.
-        @stream_set_timeout($this->resource, $whole, $micro);
+        @stream_set_timeout($this->resource, intdiv($microseconds, 1_000_000), $microseconds % 1_000_000);
     }
 }

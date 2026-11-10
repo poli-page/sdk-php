@@ -7,8 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `tests/Contract` reads the contract's format 2 and checks `expect.minCallMs`:
+  a case a timeout ends fails when the whole call, timed on `hrtime()`, lasts
+  less than its bound. A case that sets the bound but is stopped at a retry
+  event fails the run instead of skipping the check. CI pins the API contract
+  v0.15.0-dev.1.
+
 ### Fixed
 
+- A timeout never ends before its bound. The SDK hands Guzzle and Symfony
+  HTTP Client its timeout rounded up to a whole millisecond: Guzzle and cURL
+  drop the fraction of a millisecond, so a `timeout` of 1.003 s armed 1002 ms.
+  The wait for the first byte of `render->pdfStream()` and `renderToFile()`
+  arms what is left of its budget rounded up to a whole millisecond (PHP waits
+  on a socket for whole milliseconds, so it could end up to 1 ms early), and
+  a wait that still ends before the deadline waits again for the rest.
+- A `timeout` that is not a finite number of seconds up to 1e9 (about 31
+  years), such as `INF`, `NAN` or `1e16`, sets no timeout, as 0 does: your
+  HTTP client's own default applies, with Guzzle and Symfony HTTP Client
+  alike. Before, PHP wrapped it when it turned it into whole milliseconds or
+  nanoseconds: with Guzzle the call failed at once with `network_error`, and
+  with Symfony some of these values timed out at once.
 - `data` and `metadata` are now always sent as JSON objects, as the API
   contract types them. An empty one (`data: []`) went out as the JSON array
   `[]` and now goes out as `{}`. One whose keys run 0..n-1 (such as
