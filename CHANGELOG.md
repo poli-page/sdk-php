@@ -7,13 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-16
+
+Conformance with the Poli Page API contract v0.15.0
+([poli-page/api-contract](https://github.com/poli-page/api-contract)). The
+SDK shares its major.minor with the Poli Page API, so it moves from 0.13 to
+0.15; there is no 0.14 (see [RELEASING.md](RELEASING.md#versions)).
+
 ### Added
 
 - `tests/Contract` reads the contract's format 2 and checks `expect.minCallMs`:
   a case a timeout ends fails when the whole call, timed on `hrtime()`, lasts
   less than its bound. A case that sets the bound but is stopped at a retry
   event fails the run instead of skipping the check. CI pins the API contract
-  v0.15.0-dev.1.
+  v0.15.0, whose `timeout.hang` and `download.timeout` cases set this bound
+  and which adds the retry rule R-WAIT-FULL: no wait ends early, so a retry
+  delay lasts at least its delay and an attempt or download timeout fires no
+  sooner than `timeout` after it started (see Fixed).
 
 ### Fixed
 
@@ -445,7 +455,8 @@ breaking changes may still land before 1.0.0.
   macOS and Windows for 8.5. `composer validate --strict`,
   `composer audit`, lint, static analysis, and unit tests all gated.
 
-[Unreleased]: https://github.com/poli-page/sdk-php/compare/v0.13.1...HEAD
+[Unreleased]: https://github.com/poli-page/sdk-php/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/poli-page/sdk-php/compare/v0.13.1...v0.15.0
 [0.13.1]: https://github.com/poli-page/sdk-php/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/poli-page/sdk-php/compare/v0.11.0...v0.13.0
 [0.11.0]: https://github.com/poli-page/sdk-php/compare/v0.10.0...v0.11.0
