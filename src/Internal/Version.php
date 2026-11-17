@@ -13,5 +13,5 @@ namespace PoliPage\Internal;
  */
 final class Version
 {
-    public const VERSION = '0.13.1';
+    public const VERSION = '0.15.0';
 }
